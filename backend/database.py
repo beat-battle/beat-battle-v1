@@ -26,10 +26,23 @@ def _default_sqlite_url() -> str:
     return f"sqlite:///{p.as_posix()}"
 
 
+def _normalize_postgres_url(url: str) -> str:
+    """Render supplies ``postgresql://``; use psycopg v3 driver (wheels on modern Python)."""
+    try:
+        u = make_url(url)
+    except Exception:
+        return url
+    if u.get_backend_name() != "postgresql":
+        return url
+    if "psycopg" in u.drivername:
+        return url
+    return str(u.set(drivername="postgresql+psycopg"))
+
+
 def resolve_database_url() -> str:
     raw = os.environ.get("DATABASE_URL", "").strip()
     if raw:
-        return raw
+        return _normalize_postgres_url(raw)
     return _default_sqlite_url()
 
 

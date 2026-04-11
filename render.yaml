@@ -1,5 +1,7 @@
 # https://render.com/docs/blueprint-spec
 #
+# Python version: root ``runtime.txt`` (see Render Python docs). Postgres driver: psycopg 3.
+#
 # Set DATABASE_URL on the Web Service to your Render Postgres *Internal Database URL*
 # (Environment tab, or link the Postgres database to inject it). Do not commit credentials.
 # Free web services cannot use persistent disks; use managed Postgres for durable data.
