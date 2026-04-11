@@ -10,12 +10,18 @@ If you see **password authentication failed**, the URL on the Web Service does n
 the database user/password (stale env after a password reset, typo, or extra quotes/spaces).
 Copy the Internal URL again from the Postgres service, or reset the DB password and update
 ``DATABASE_URL``. Use the **internal** URL for the web service on Render, not the external host.
+
+**Alternative (recommended if the URL keeps failing):** set these on the Web Service (plain text,
+no URL encoding needed): ``COOKUP_DB_HOST``, ``COOKUP_DB_USER``, ``COOKUP_DB_PASSWORD``,
+``COOKUP_DB_NAME``, optional ``COOKUP_DB_PORT`` (default 5432). Leave ``DATABASE_URL`` unset,
+or set ``COOKUP_DB_USE_SPLIT=1`` to ignore a stale ``DATABASE_URL`` when split vars are set.
 """
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import quote, quote_plus
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine.url import make_url
@@ -65,10 +71,38 @@ def _ensure_postgres_default_port(url: str) -> str:
     return str(u.set(port=5432))
 
 
+def _database_url_from_split_env() -> str:
+    """Build a Postgres URL with proper encoding (avoids broken passwords in pasted URLs)."""
+    host = os.environ.get("COOKUP_DB_HOST", "").strip()
+    user = os.environ.get("COOKUP_DB_USER", "").strip()
+    password = os.environ.get("COOKUP_DB_PASSWORD", "").strip()
+    database = os.environ.get("COOKUP_DB_NAME", "").strip()
+    if not (host and user and password and database):
+        return ""
+    port = os.environ.get("COOKUP_DB_PORT", "5432").strip() or "5432"
+    u = quote_plus(user)
+    p = quote_plus(password)
+    d = quote(database, safe="")
+    return f"postgresql://{u}:{p}@{host}:{port}/{d}"
+
+
+def _use_split_db_over_url() -> bool:
+    return os.environ.get("COOKUP_DB_USE_SPLIT", "").strip().lower() in ("1", "true", "yes")
+
+
 def resolve_database_url() -> str:
-    raw = _strip_database_url_env(os.environ.get("DATABASE_URL", ""))
-    if raw:
-        url = _normalize_postgres_url(raw)
+    split_raw = _database_url_from_split_env()
+    db_url_raw = _strip_database_url_env(os.environ.get("DATABASE_URL", ""))
+    use_split_first = _use_split_db_over_url() and bool(split_raw)
+
+    if use_split_first:
+        url = _normalize_postgres_url(split_raw)
+        return _ensure_postgres_default_port(url)
+    if db_url_raw:
+        url = _normalize_postgres_url(db_url_raw)
+        return _ensure_postgres_default_port(url)
+    if split_raw:
+        url = _normalize_postgres_url(split_raw)
         return _ensure_postgres_default_port(url)
     return _default_sqlite_url()
 
