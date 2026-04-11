@@ -1,0 +1,47 @@
+"""
+Pydantic schemas for auth and API responses.
+"""
+
+from __future__ import annotations
+
+import re
+
+from pydantic import BaseModel, Field, field_validator
+
+USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]{3,20}$")
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=20)
+    password: str = Field(..., min_length=1)
+
+    @field_validator("username")
+    @classmethod
+    def username_chars(cls, v: str) -> str:
+        if not USERNAME_PATTERN.match(v):
+            raise ValueError("Username must be 3–20 characters: letters, numbers, underscores only.")
+        return v
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    token: str
+    username: str
+
+
+class RegisterResponse(BaseModel):
+    message: str
+
+
+class LeaderboardEntry(BaseModel):
+    username: str
+    wins: int
+
+
+class MeResponse(BaseModel):
+    username: str
+    wins: int

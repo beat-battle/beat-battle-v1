@@ -1,0 +1,204 @@
+/**
+ * LobbyScreen — player list, ready, start_game → Cook.
+ */
+import { mountAuthCornerLeave } from "../authCorner.js";
+import { playSfxBeatBattle, playSfxMajor, playSfxMinor } from "../sfx.js";
+import { mountCookScreen } from "./cook.js";
+
+function renderLobby(root, lobby, selfId) {
+  const players = lobby.players || [];
+  const hostId = lobby.host_id || "";
+  const isHost = Boolean(selfId && hostId && selfId === hostId);
+  const cookMin = Number(lobby.cook_duration_min) || 10;
+  const rows = players
+    .map(
+      (p) => `
+    <div class="lobby-row">
+      <span class="lobby-name">${escapeHtml(p.name)}${p.id === hostId ? " · host" : ""}</span>
+      <span class="lobby-ready">${p.ready ? "✔" : ""}</span>
+    </div>
+  `,
+    )
+    .join("");
+
+  const hostDuration = isHost
+    ? `
+    <div class="host-cook-duration">
+      <label class="arcade-label" for="cook-duration-select">Cook time (host)</label>
+      <select id="cook-duration-select" class="arcade-select" aria-label="Cook duration in minutes">
+        <option value="5"${cookMin === 5 ? " selected" : ""}>5 min</option>
+        <option value="10"${cookMin === 10 ? " selected" : ""}>10 min</option>
+        <option value="15"${cookMin === 15 ? " selected" : ""}>15 min</option>
+        <option value="20"${cookMin === 20 ? " selected" : ""}>20 min</option>
+      </select>
+    </div>
+  `
+    : "";
+
+  root.innerHTML = `
+    <div class="screen lobby arcade-panel">
+      <h2 class="arcade-heading">LOBBY <span class="lobby-id">${escapeHtml(lobby.lobby_id || "")}</span></h2>
+      <p class="arcade-hint">Spice ${lobby.spice} · ${lobby.is_public ? "Public" : "Code only"} · min 2 players · all ready · cook ${cookMin} min</p>
+      ${hostDuration}
+      <div class="lobby-list">${rows}</div>
+      <p class="arcade-error" id="lobby-err"></p>
+      <div class="arcade-actions">
+        <button type="button" class="arcade-btn arcade-btn-primary" id="btn-ready">READY</button>
+        <button type="button" class="arcade-btn arcade-btn-secondary" id="btn-leave">Leave</button>
+      </div>
+    </div>
+  `;
+  root.dataset.selfId = selfId;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export function mountLobbyScreen(root, ctx) {
+  const ws = ctx.mpWs;
+  const playerId = ctx.playerId;
+  let lobby = ctx.lobby;
+  let preserveWs = false;
+  let intentionalLeave = false;
+
+  const paint = () => renderLobby(root, lobby, playerId);
+
+  const errEl = () => root.querySelector("#lobby-err");
+
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    import("./multiplayerHub.js").then((m) => ctx.navigate(m.mountMultiplayerHubScreen));
+    return () => {};
+  }
+
+  mountAuthCornerLeave(ctx);
+
+  const onMessage = (ev) => {
+    let m;
+    try {
+      m = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    if (m.type === "lobby_update" && m.lobby) {
+      lobby = m.lobby;
+      paint();
+    }
+    if (m.type === "player_ready") {
+      /* lobby_update follows */
+    }
+    if (m.type === "error") {
+      const e = errEl();
+      if (e) e.textContent = m.message || "Error";
+    }
+    if (m.type === "lobby_dissolved") {
+      intentionalLeave = true;
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      import("./modeSelect.js").then((mod) => ctx.navigate(mod.mountModeSelectScreen));
+      return;
+    }
+    if (m.type === "start_game") {
+      playSfxBeatBattle();
+      preserveWs = true;
+      ctx.navigate(mountCookScreen, {
+        mpWs: ws,
+        playerId,
+        lobbyId: m.lobby_id,
+        seed: m.seed,
+        spice: m.spice,
+        sounds: m.sounds,
+        cookDurationMin: m.cook_duration_min ?? 10,
+      });
+    }
+  };
+
+  ws.onclose = () => {
+    if (preserveWs || intentionalLeave) return;
+    import("./multiplayerHub.js").then((m) => ctx.navigate(m.mountMultiplayerHubScreen));
+  };
+
+  ws.onmessage = onMessage;
+
+  const changeHandler = (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLSelectElement) || t.id !== "cook-duration-select") return;
+    playSfxMinor();
+    if (ws.readyState !== WebSocket.OPEN) {
+      const err = errEl();
+      if (err) err.textContent = "Not connected.";
+      return;
+    }
+    try {
+      ws.send(
+        JSON.stringify({
+          type: "set_cook_duration",
+          minutes: parseInt(t.value, 10),
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const clickHandler = (e) => {
+    const t = e.target;
+    const origin = t instanceof Element ? t : t && "parentElement" in t ? t.parentElement : null;
+    const btn = origin?.closest?.("#btn-ready, #btn-leave");
+    if (!btn) return;
+
+    if (btn.id === "btn-ready") {
+      if (/** @type {HTMLButtonElement} */ (btn).disabled) return;
+      playSfxMajor();
+      if (ws.readyState !== WebSocket.OPEN) {
+        const err = errEl();
+        if (err) err.textContent = "Not connected. Leave and rejoin.";
+        return;
+      }
+      /** @type {HTMLButtonElement} */ (btn).disabled = true;
+      try {
+        ws.send(JSON.stringify({ type: "player_ready" }));
+      } catch {
+        /** @type {HTMLButtonElement} */ (btn).disabled = false;
+      }
+      return;
+    }
+
+    if (btn.id === "btn-leave") {
+      playSfxMinor();
+      intentionalLeave = true;
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      import("./modeSelect.js").then((mod) => ctx.navigate(mod.mountModeSelectScreen));
+    }
+  };
+  root.addEventListener("click", clickHandler);
+  root.addEventListener("change", changeHandler);
+
+  paint();
+
+  return () => {
+    intentionalLeave = true;
+    root.removeEventListener("click", clickHandler);
+    root.removeEventListener("change", changeHandler);
+    root.innerHTML = "";
+    ws.onclose = null;
+    if (!preserveWs) {
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+}

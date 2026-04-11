@@ -1,0 +1,142 @@
+"""
+Password hashing, JWT, registration, login, and auth dependencies.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+from datetime import datetime, timedelta, timezone
+from typing import Annotated
+
+import bcrypt
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
+
+from .database import SessionLocal, get_db
+from .models import User
+from .schemas import LoginRequest, RegisterRequest, RegisterResponse, TokenResponse
+
+# Insecure default for local dev only — set COOKUP_JWT_SECRET in production.
+SECRET_KEY = os.environ.get("COOKUP_JWT_SECRET", "dev-insecure-change-me-cookup-jwt-secret")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_DAYS = 7
+
+security = HTTPBearer(auto_error=False)
+
+
+def _password_key_bytes(plain: str) -> bytes:
+    """SHA-256 digest (32 bytes) — bcrypt input stays under 72-byte limit for any UTF-8 password."""
+    return hashlib.sha256(plain.encode("utf-8")).digest()
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    h = hashed.encode("ascii")
+    try:
+        if bcrypt.checkpw(_password_key_bytes(plain), h):
+            return True
+    except ValueError:
+        pass
+    # Legacy: hashes created with passlib+bcrypt of raw UTF-8 (only possible if len <= 72 bytes).
+    try:
+        raw = plain.encode("utf-8")
+        if len(raw) <= 72:
+            return bcrypt.checkpw(raw, h)
+    except ValueError:
+        return False
+    return False
+
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(_password_key_bytes(password), bcrypt.gensalt()).decode("ascii")
+
+
+def create_access_token(*, user_id: int, username: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    payload = {
+        "sub": str(user_id),
+        "username": username,
+        "exp": expire,
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_token(token: str) -> dict:
+    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+
+def register_user(db: Session, body: RegisterRequest) -> RegisterResponse:
+    existing = db.query(User).filter(User.username == body.username).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already taken.")
+    user = User(
+        username=body.username,
+        password_hash=hash_password(body.password),
+        wins=0,
+    )
+    db.add(user)
+    db.commit()
+    return RegisterResponse(message="Registration successful.")
+
+
+def login_user(db: Session, body: LoginRequest) -> TokenResponse:
+    user = db.query(User).filter(User.username == body.username).first()
+    if not user or not verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+    token = create_access_token(user_id=user.id, username=user.username)
+    return TokenResponse(token=token, username=user.username)
+
+
+def get_user_by_id(db: Session, user_id: int) -> User | None:
+    return db.get(User, user_id)
+
+
+def increment_wins_for_users(db: Session, user_ids: list[int]) -> None:
+    seen: set[int] = set()
+    for uid in user_ids:
+        if uid in seen:
+            continue
+        seen.add(uid)
+        u = db.get(User, uid)
+        if u is not None:
+            u.wins += 1
+    db.commit()
+
+
+def get_current_user(
+    creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+    db: Annotated[Session, Depends(get_db)],
+) -> User:
+    if creds is None or creds.scheme.lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    try:
+        payload = decode_token(creds.credentials)
+        uid = int(payload["sub"])
+    except (JWTError, KeyError, ValueError, TypeError):
+        raise HTTPException(status_code=401, detail="Invalid or expired token.")
+    user = get_user_by_id(db, uid)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return user
+
+
+def validate_ws_token(token: str | None) -> tuple[int, str] | None:
+    """Validate JWT and that the user still exists (for WebSocket connect)."""
+    if not token or not str(token).strip():
+        return None
+    try:
+        payload = decode_token(str(token).strip())
+        uid = int(payload["sub"])
+        un = str(payload["username"])
+    except (JWTError, KeyError, ValueError, TypeError):
+        return None
+    db = SessionLocal()
+    try:
+        user = db.get(User, uid)
+        if user is None or user.username != un:
+            return None
+        return uid, user.username
+    finally:
+        db.close()

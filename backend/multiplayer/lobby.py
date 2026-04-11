@@ -1,0 +1,95 @@
+"""
+Lobby and player models; spice presets and game states.
+"""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
+
+# Match spec: three spice cards map to these generation intensities.
+SPICE_MILD = 0.25
+SPICE_MEDIUM = 0.5
+SPICE_HOT = 0.85
+ALLOWED_SPICES: frozenset[float] = frozenset({SPICE_MILD, SPICE_MEDIUM, SPICE_HOT})
+
+
+def canonical_spice(value: float) -> float | None:
+    """Map a float (e.g. from JSON) to the nearest allowed spice preset."""
+    v = float(value)
+    for a in (SPICE_MILD, SPICE_MEDIUM, SPICE_HOT):
+        if abs(v - a) < 0.02:
+            return a
+    return None
+
+COOK_DURATION_S = 600
+# Host-selectable cook length (minutes); UI/backend clamp to these values.
+COOK_DURATION_MIN_OPTIONS: tuple[int, ...] = (5, 10, 15, 20)
+DEFAULT_COOK_DURATION_MIN = 10
+# Upload window after cook ends so matches do not stall if someone drops.
+UPLOAD_PHASE_S = 600
+# Seconds per beat in slideshow (1–30s playback) plus small pad before votes unlock.
+SLIDESHOW_SEGMENT_S = 31
+# Max time to collect votes after unlock.
+VOTING_COLLECT_S = 300
+# Lobbies in results older than this are purged (uploads deleted).
+LOBBY_RESULTS_TTL_S = 3600
+
+
+class LobbyState(str, Enum):
+    WAITING = "waiting"
+    LOBBY = "lobby"
+    GENERATING = "generating"
+    COOKING = "cooking"
+    UPLOAD = "upload"
+    VOTING = "voting"
+    RESULTS = "results"
+
+
+@dataclass
+class Player:
+    id: str
+    name: str
+    user_id: int
+    ready: bool = False
+
+
+@dataclass
+class Lobby:
+    id: str
+    spice: float
+    is_public: bool = True
+    players: dict[str, Player] = field(default_factory=dict)
+    state: LobbyState = LobbyState.LOBBY
+    seed: int | None = None
+    sounds: dict[str, str] | None = None
+    votes: dict[str, str] = field(default_factory=dict)
+    uploaded: set[str] = field(default_factory=set)
+    votes_unlock_at: float | None = None
+    created_at: float = field(default_factory=time.time)
+    results_at: float | None = None
+    cook_duration_min: int = DEFAULT_COOK_DURATION_MIN
+    cook_finished: set[str] = field(default_factory=set)
+
+    def lobby_snapshot(self) -> dict[str, Any]:
+        host_id = next(iter(self.players)) if self.players else ""
+        drumkit: dict[str, Any] = {}
+        if self.seed is not None:
+            drumkit["seed"] = self.seed
+        if self.sounds:
+            drumkit["has_kit"] = True
+        return {
+            "lobby_id": self.id,
+            "spice": self.spice,
+            "is_public": self.is_public,
+            "state": self.state.value,
+            "host_id": host_id,
+            "cook_duration_min": self.cook_duration_min,
+            "players": [
+                {"id": p.id, "name": p.name, "ready": p.ready} for p in self.players.values()
+            ],
+            "drumkit": drumkit,
+            "votes": dict(self.votes),
+        }

@@ -1,0 +1,62 @@
+{
+  "default": {
+    "duration_s": 1.2,
+    "normalize_peak": 0.93,
+    "fade_out_amt": 0.4
+  },
+  "snare": {
+    "normalize_peak_multiplier": 1.03,
+    "duration_multiplier": 0.75,
+    "fade_out_amt_multiplier": 0.4
+  },
+  "clap": {
+    "normalize_peak_multiplier": 0.95,
+    "duration_multiplier": 0.6,
+    "fade_out_amt_multiplier": 0.7
+  },
+  "hihat": {
+    "normalize_peak_multiplier": 0.82,
+    "duration_multiplier": 0.5,
+    "fade_out_amt_multiplier": 1
+  },
+  "open_hat": {
+    "normalize_peak_multiplier": 0.88,
+    "duration_multiplier": 1.1,
+    "fade_out_amt_multiplier": 0.2
+  },
+  "808": {
+    "normalize_peak_multiplier": 1.04,
+    "duration_multiplier": 1.5,
+    "fade_out_amt_multiplier": 0.9
+  },
+  "perc": {
+    "normalize_peak_multiplier": 0.9,
+    "duration_multiplier": 0.8,
+    "fade_out_amt_multiplier": 0.4
+  },
+  "fx": {
+    "normalize_peak_multiplier": 0.84,
+    "duration_multiplier": 1.6,
+    "fade_out_amt_multiplier": 0.15
+  },
+  "vox": {
+    "normalize_peak_multiplier": 0.86,
+    "duration_multiplier": 1.5,
+    "fade_out_amt_multiplier": 0.4
+  },
+  "synth1": {
+    "normalize_peak_multiplier": 0.84,
+    "duration_multiplier": 2.0,
+    "fade_out_amt_multiplier": 0.6
+  },
+  "synth2": {
+    "normalize_peak_multiplier": 0.8,
+    "duration_multiplier": 4.0,
+    "fade_out_amt_multiplier": 0.25
+  },
+  "synth3": {
+    "normalize_peak_multiplier": 0.86,
+    "duration_multiplier": 0.22,
+    "fade_out_amt_multiplier": 0.55
+  }
+}
