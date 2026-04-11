@@ -5,6 +5,11 @@ SQLAlchemy engine and session factory for CookUp accounts.
 - **Production (Render Postgres):** set ``DATABASE_URL`` to the **Internal Database URL**
   from your Render Postgres dashboard (or link the DB so Render injects it). Never commit
   credentials; set them only in the Render dashboard or a local ``.env`` (gitignored).
+
+If you see **password authentication failed**, the URL on the Web Service does not match
+the database user/password (stale env after a password reset, typo, or extra quotes/spaces).
+Copy the Internal URL again from the Postgres service, or reset the DB password and update
+``DATABASE_URL``. Use the **internal** URL for the web service on Render, not the external host.
 """
 
 from __future__ import annotations
@@ -19,6 +24,14 @@ from collections.abc import Generator
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _strip_database_url_env(raw: str) -> str:
+    """Trim whitespace and one pair of surrounding quotes (common copy-paste mistake in Render UI)."""
+    s = raw.strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'":
+        s = s[1:-1].strip()
+    return s
 
 
 def _default_sqlite_url() -> str:
@@ -39,10 +52,24 @@ def _normalize_postgres_url(url: str) -> str:
     return str(u.set(drivername="postgresql+psycopg"))
 
 
+def _ensure_postgres_default_port(url: str) -> str:
+    """Render internal URLs often omit ``:5432``; set explicitly for reliable connects."""
+    try:
+        u = make_url(url)
+    except Exception:
+        return url
+    if u.get_backend_name() != "postgresql":
+        return url
+    if u.port is not None:
+        return url
+    return str(u.set(port=5432))
+
+
 def resolve_database_url() -> str:
-    raw = os.environ.get("DATABASE_URL", "").strip()
+    raw = _strip_database_url_env(os.environ.get("DATABASE_URL", ""))
     if raw:
-        return _normalize_postgres_url(raw)
+        url = _normalize_postgres_url(raw)
+        return _ensure_postgres_default_port(url)
     return _default_sqlite_url()
 
 
@@ -71,11 +98,15 @@ def _create_engine():
     url = DATABASE_URL
     kwargs: dict = {"pool_pre_ping": True}
     try:
-        backend = make_url(url).get_backend_name()
+        parsed = make_url(url)
+        backend = parsed.get_backend_name()
     except Exception:
         backend = "sqlite"
+        parsed = None
     if backend == "sqlite":
         kwargs["connect_args"] = {"check_same_thread": False}
+    elif backend == "postgresql":
+        kwargs["connect_args"] = {"connect_timeout": 15}
     return create_engine(url, **kwargs)
 
 
