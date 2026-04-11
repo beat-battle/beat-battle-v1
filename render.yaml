@@ -3,9 +3,9 @@
 # Python: ``PYTHON_VERSION`` below + repo ``runtime.txt`` + ``backend/runtime.txt`` (if Root Dir is ``backend``).
 # If deploy still shows 3.14, set Python 3.12 in the Web Service Settings UI.
 #
-# Postgres: link DB or set ``DATABASE_URL``. If auth fails, use split vars instead (see ``backend/database.py``):
-# COOKUP_DB_HOST, COOKUP_DB_USER, COOKUP_DB_PASSWORD, COOKUP_DB_NAME, optional COOKUP_DB_PORT.
-# Free web services cannot use persistent disks; use managed Postgres for durable data.
+# Database: set ``DATABASE_URL`` to your Neon connection string (Dashboard → Connect).
+# Optional: ``COOKUP_DB_*`` split vars + ``COOKUP_DB_USE_SPLIT=1`` — see ``backend/database.py``.
+# Free web services cannot use persistent disks; Neon (or similar) holds durable data.
 services:
   - type: web
     name: beat-battle

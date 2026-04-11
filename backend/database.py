@@ -1,20 +1,22 @@
 """
 SQLAlchemy engine and session factory for CookUp accounts.
 
-- **Local dev:** leave ``DATABASE_URL`` unset to use SQLite at ``<project_root>/cookup.db``.
-- **Production (Render Postgres):** set ``DATABASE_URL`` to the **Internal Database URL**
-  from your Render Postgres dashboard (or link the DB so Render injects it). Never commit
-  credentials; set them only in the Render dashboard or a local ``.env`` (gitignored).
+- **Local dev:** leave ``DATABASE_URL`` unset → SQLite at ``<project_root>/cookup.db``.
 
-If you see **password authentication failed**, the URL on the Web Service does not match
-the database user/password (stale env after a password reset, typo, or extra quotes/spaces).
-Copy the Internal URL again from the Postgres service, or reset the DB password and update
-``DATABASE_URL``. Use the **internal** URL for the web service on Render, not the external host.
+- **Production (Neon, neon.tech):** in the Neon dashboard, copy the
+  **connection string** (``postgresql://…``). Set ``DATABASE_URL`` on your host (e.g. Render
+  Web Service **Environment**). Neon requires TLS; if your string omits it, we append
+  ``sslmode=require`` for ``*.neon.tech`` hosts. Never commit secrets.
 
-**Alternative (recommended if the URL keeps failing):** set these on the Web Service (plain text,
-no URL encoding needed): ``COOKUP_DB_HOST``, ``COOKUP_DB_USER``, ``COOKUP_DB_PASSWORD``,
-``COOKUP_DB_NAME``, optional ``COOKUP_DB_PORT`` (default 5432). Leave ``DATABASE_URL`` unset,
-or set ``COOKUP_DB_USE_SPLIT=1`` to ignore a stale ``DATABASE_URL`` when split vars are set.
+- **Split env vars** (optional, avoids fragile pasted URLs): ``COOKUP_DB_HOST``,
+  ``COOKUP_DB_USER``, ``COOKUP_DB_PASSWORD``, ``COOKUP_DB_NAME``, optional ``COOKUP_DB_PORT``.
+  Set ``COOKUP_DB_USE_SPLIT=1`` to prefer these over ``DATABASE_URL`` when both exist.
+
+- **Force SSL** for any Postgres host: ``COOKUP_PG_REQUIRE_SSL=1`` (adds ``sslmode=require``
+  when not already in the URL).
+
+Auth errors almost always mean wrong user/password in env or an expired/rotated password—
+update values in Neon (or your provider) and redeploy.
 """
 
 from __future__ import annotations
@@ -59,7 +61,7 @@ def _normalize_postgres_url(url: str) -> str:
 
 
 def _ensure_postgres_default_port(url: str) -> str:
-    """Render internal URLs often omit ``:5432``; set explicitly for reliable connects."""
+    """Internal URLs sometimes omit ``:5432``; set explicitly when missing."""
     try:
         u = make_url(url)
     except Exception:
@@ -69,6 +71,32 @@ def _ensure_postgres_default_port(url: str) -> str:
     if u.port is not None:
         return url
     return str(u.set(port=5432))
+
+
+def _ensure_postgres_sslmode(url: str) -> str:
+    """Neon and many cloud Postgres providers require TLS (``sslmode=require``)."""
+    try:
+        u = make_url(url)
+    except Exception:
+        return url
+    if u.get_backend_name() != "postgresql":
+        return url
+    host = (u.host or "").lower()
+    q = dict(u.query)
+    keys_lower = {k.lower() for k in q}
+    if "sslmode" in keys_lower or "ssl" in keys_lower:
+        return url
+    require = os.environ.get("COOKUP_PG_REQUIRE_SSL", "").strip().lower() in ("1", "true", "yes")
+    if "neon.tech" in host or require:
+        merged = {**q, "sslmode": "require"}
+        return str(u.set(query=merged))
+    return url
+
+
+def _finalize_postgres_url(url: str) -> str:
+    url = _ensure_postgres_default_port(url)
+    url = _ensure_postgres_sslmode(url)
+    return url
 
 
 def _database_url_from_split_env() -> str:
@@ -97,13 +125,13 @@ def resolve_database_url() -> str:
 
     if use_split_first:
         url = _normalize_postgres_url(split_raw)
-        return _ensure_postgres_default_port(url)
+        return _finalize_postgres_url(url)
     if db_url_raw:
         url = _normalize_postgres_url(db_url_raw)
-        return _ensure_postgres_default_port(url)
+        return _finalize_postgres_url(url)
     if split_raw:
         url = _normalize_postgres_url(split_raw)
-        return _ensure_postgres_default_port(url)
+        return _finalize_postgres_url(url)
     return _default_sqlite_url()
 
 
@@ -141,6 +169,9 @@ def _create_engine():
         kwargs["connect_args"] = {"check_same_thread": False}
     elif backend == "postgresql":
         kwargs["connect_args"] = {"connect_timeout": 15}
+        if parsed.host and "neon.tech" in parsed.host.lower():
+            # Serverless Postgres: drop stale connections before the platform does
+            kwargs["pool_recycle"] = 300
     return create_engine(url, **kwargs)
 
 
