@@ -516,23 +516,6 @@ audio {
   position: relative;
 }
 
-.solo-kit-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.92);
-  padding: 1.25rem;
-  overflow-y: auto;
-}
-
-.synth-reveal--embed {
-  min-height: auto;
-  padding: 0;
-}
-
 .solo .solo-toolbar {
   text-align: center;
 }
@@ -1074,6 +1057,20 @@ audio {
   opacity: 0.75;
 }
 
+/* Full-viewport layer (body); synth UI not clipped by #app-root */
+.synth-reveal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(0.75rem, 3vw, 1.75rem);
+  background: rgba(0, 0, 0, 0.92);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
 /* Synth reveal (client-built kit) — playing-card ratio 2.5×3.5 (5:7), vertical shuffle only */
 .synth-reveal {
   text-align: center;
@@ -1083,6 +1080,13 @@ audio {
   flex-direction: column;
   justify-content: center;
   align-items: center;
+}
+
+.synth-reveal-overlay > .synth-reveal {
+  min-height: unset;
+  width: 100%;
+  max-width: 100%;
+  flex-shrink: 0;
 }
 
 .synth-reveal-heading {

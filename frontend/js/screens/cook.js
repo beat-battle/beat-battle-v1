@@ -156,7 +156,7 @@ async function buildKitClientSide(root, ctx, start) {
 
     if (loadEl) loadEl.textContent = "";
 
-    await runSynthReveal(root, ac, synthBuffers, () => drumsPending);
+    await runSynthReveal(ac, synthBuffers, () => drumsPending);
 
     const drumSounds = await drumPromise;
     const sounds = { ...drumSounds };

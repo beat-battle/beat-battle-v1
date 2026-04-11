@@ -319,7 +319,6 @@ export function mountSoloScreen(root, ctx) {
     const btnGen = root.querySelector("#btn-generate");
     const btnReg = root.querySelector("#btn-regenerate");
     const spiceNum = spiceEl ? parseFloat(spiceEl.value) : 0.3;
-    const screen = root.querySelector(".screen.solo");
 
     const loading = () => {
       if (status) status.textContent = "";
@@ -334,21 +333,16 @@ export function mountSoloScreen(root, ctx) {
     playSfxMajor();
     clearKitLoadUi();
     loading();
-    if (!screen) {
-      doneLoading();
-      if (status) status.textContent = "UI error.";
-      return;
-    }
 
     const seed = Math.floor(Math.random() * 0x80000000);
     const base = resolveApiBase(ctx);
-    const overlay = document.createElement("div");
-    overlay.className = "solo-kit-overlay";
-    overlay.setAttribute("role", "status");
-    overlay.innerHTML = '<p class="arcade-status" id="solo-kit-load">Loading kit…</p>';
-    screen.appendChild(overlay);
-    activeKitOverlay = overlay;
-    const loadEl = overlay.querySelector("#solo-kit-load");
+    const loadLayer = document.createElement("div");
+    loadLayer.className = "synth-reveal-overlay";
+    loadLayer.setAttribute("role", "status");
+    loadLayer.innerHTML = '<p class="arcade-status" id="solo-kit-load">Loading kit…</p>';
+    document.body.appendChild(loadLayer);
+    activeKitOverlay = loadLayer;
+    const loadEl = loadLayer.querySelector("#solo-kit-load");
 
     const ac = new AudioContext({ sampleRate: 44100 });
     activeKitAc = ac;
@@ -378,7 +372,10 @@ export function mountSoloScreen(root, ctx) {
       });
 
       if (loadEl) loadEl.textContent = "";
-      await runSynthReveal(overlay, ac, synthBuffers, () => drumsPending);
+      loadLayer.remove();
+      activeKitOverlay = null;
+
+      await runSynthReveal(ac, synthBuffers, () => drumsPending);
 
       const drumSounds = await drumPromise;
       const sounds = { ...drumSounds };
@@ -388,8 +385,6 @@ export function mountSoloScreen(root, ctx) {
 
       await ac.close().catch(() => {});
       activeKitAc = null;
-      overlay.remove();
-      activeKitOverlay = null;
 
       lastSoundsB64 = sounds;
       if (!kitGridBuilt) buildGrid();
