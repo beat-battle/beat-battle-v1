@@ -494,3 +494,65 @@ def generate_kit(
             )
 
     return out
+
+
+# Order must match ``kit_payload.API_SOUND_KEYS`` (solo / multiplayer / UI).
+_LIGHT_KIT_KEYS: tuple[str, ...] = (
+    "snare",
+    "clap",
+    "hihat",
+    "open_hat",
+    "808",
+    "perc",
+    "fx",
+    "vox",
+    "synth1",
+    "synth2",
+    "synth3",
+)
+
+
+def generate_light_stem(seed: int, slot_index: int, logical: str, out_dir: Path) -> Path:
+    """
+    Pick one random ``.wav`` for the slot, resample to mono 44.1 kHz, save.
+    No saturation, filters, layering, or quality retries — minimal CPU/RAM.
+    """
+    rng = np.random.default_rng(seed + slot_index * 1_000_003)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if logical.startswith("synth"):
+        synth_dir = DATASET_ROOT / "synths"
+        if not synth_dir.is_dir():
+            raise FileNotFoundError(f"Category folder not found: {synth_dir}")
+        wavs = sorted(p for p in synth_dir.iterdir() if p.is_file() and p.suffix.lower() == ".wav")
+        if not wavs:
+            raise ValueError(f"No .wav files in {synth_dir}.")
+        path_pick = wavs[int(rng.integers(0, len(wavs)))]
+        y, _sr = load_audio_file(path_pick)
+    else:
+        d = _dataset_dir(logical)
+        y, _sr = load_random_sample(d, rng)
+
+    dest = out_dir / f"{logical}.wav"
+    save_audio(y, dest, SAMPLE_RATE)
+    return dest.resolve()
+
+
+def generate_kit_light(
+    seed: int,
+    spice: float = 0.3,
+    output_dir: Path | None = None,
+) -> dict[str, Path]:
+    """
+    Build a full kit by sampling the dataset only (no DSP chain).
+    ``spice`` is kept for API compatibility with :func:`generate_kit` but is unused.
+    """
+    _ = float(np.clip(spice, 0.0, 1.0))
+    out_dir = Path(output_dir) if output_dir is not None else OUTPUT_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _cleanup_stale_outputs(out_dir)
+    out: dict[str, Path] = {}
+    for i, key in enumerate(_LIGHT_KIT_KEYS):
+        out[key] = generate_light_stem(seed, i, key, out_dir)
+    return out

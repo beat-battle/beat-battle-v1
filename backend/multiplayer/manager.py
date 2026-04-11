@@ -18,7 +18,8 @@ from starlette.websockets import WebSocket
 
 from ..auth import increment_wins_for_users
 from ..database import SessionLocal
-from ..kit_payload import kit_to_base64_payload
+from ..generator import generate_light_stem
+from ..kit_payload import API_SOUND_KEYS, encode_paths_to_sounds
 from .lobby import (
     ALLOWED_SPICES,
     COOK_DURATION_MIN_OPTIONS,
@@ -59,6 +60,22 @@ def _normalize_cook_duration_min(raw: Any) -> int | None:
     if n in COOK_DURATION_MIN_OPTIONS:
         return n
     return None
+
+
+def _kit_progress_message(key: str) -> str:
+    return {
+        "snare": "Picking a snare sample…",
+        "clap": "Picking a clap sample…",
+        "hihat": "Picking a hi-hat sample…",
+        "open_hat": "Picking an open hat sample…",
+        "808": "Picking an 808 sample…",
+        "perc": "Picking a percussion sample…",
+        "fx": "Picking an FX sample…",
+        "vox": "Picking a vocal sample…",
+        "synth1": "Picking a synth sample…",
+        "synth2": "Picking a synth sample…",
+        "synth3": "Picking a synth sample…",
+    }.get(key, f"Loading {key}…")
 
 
 def _normalize_player_spices(data: dict[str, Any]) -> list[float] | None:
@@ -453,19 +470,52 @@ class LobbyManager:
                 return
             if not all(p.ready for p in lobby.players.values()):
                 return
+            seed = random.randint(0, 2**31 - 1)
+            lobby.seed = seed
             lobby.state = LobbyState.GENERATING
             spice = lobby.spice
             lobby.cook_finished.clear()
+            snap_start = lobby.lobby_snapshot()
 
-        seed = random.randint(0, 2**31 - 1)
+        await self.broadcast(lobby_id, {"type": "lobby_update", "lobby": snap_start})
+        total_steps = len(API_SOUND_KEYS)
+        await self.broadcast(
+            lobby_id,
+            {
+                "type": "kit_progress",
+                "step": 0,
+                "total": total_steps,
+                "message": "Preparing kit…",
+                "percent": 0,
+            },
+        )
+
         tmp = tempfile.mkdtemp(prefix="kit_")
         try:
-            payload = await asyncio.to_thread(kit_to_base64_payload, seed, spice, Path(tmp))
+            paths: dict[str, Path] = {}
+            tmp_path = Path(tmp)
+            for i, key in enumerate(API_SOUND_KEYS):
+                p = await asyncio.to_thread(generate_light_stem, seed, i, key, tmp_path)
+                paths[key] = p
+                pct = int((i + 1) / total_steps * 100)
+                await self.broadcast(
+                    lobby_id,
+                    {
+                        "type": "kit_progress",
+                        "step": i + 1,
+                        "total": total_steps,
+                        "label": key,
+                        "message": _kit_progress_message(key),
+                        "percent": pct,
+                    },
+                )
+            sounds = await asyncio.to_thread(encode_paths_to_sounds, paths)
         except Exception as e:
             async with self._lock:
                 L = self.lobbies.get(lobby_id)
                 if L:
                     L.state = LobbyState.LOBBY
+                    L.seed = None
                     for p in L.players.values():
                         p.ready = False
                     snap = L.lobby_snapshot()
@@ -485,8 +535,7 @@ class LobbyManager:
             lobby = self.lobbies.get(lobby_id)
             if not lobby:
                 return
-            lobby.seed = seed
-            lobby.sounds = payload["sounds"]
+            lobby.sounds = sounds
             lobby.state = LobbyState.COOKING
             lobby.uploaded.clear()
             lobby.votes.clear()

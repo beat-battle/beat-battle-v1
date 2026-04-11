@@ -5,11 +5,16 @@ import { mountAuthCornerLeave } from "../authCorner.js";
 import { playSfxBeatBattle, playSfxMajor, playSfxMinor } from "../sfx.js";
 import { mountCookScreen } from "./cook.js";
 
-function renderLobby(root, lobby, selfId) {
+function renderLobby(root, lobby, selfId, kitProgress) {
   const players = lobby.players || [];
   const hostId = lobby.host_id || "";
   const isHost = Boolean(selfId && hostId && selfId === hostId);
   const cookMin = Number(lobby.cook_duration_min) || 10;
+  const generating = lobby.state === "generating" || kitProgress != null;
+  const pct = generating ? Math.min(100, Number(kitProgress?.percent) || 0) : 0;
+  const kitMsg = kitProgress?.message || "Preparing kit…";
+  const step = kitProgress?.step ?? 0;
+  const total = kitProgress?.total ?? 11;
   const rows = players
     .map(
       (p) => `
@@ -42,10 +47,25 @@ function renderLobby(root, lobby, selfId) {
       ${hostDuration}
       <div class="lobby-list">${rows}</div>
       <p class="arcade-error" id="lobby-err"></p>
-      <div class="arcade-actions">
+      <div class="arcade-actions"${generating ? ' hidden' : ""}>
         <button type="button" class="arcade-btn arcade-btn-primary" id="btn-ready">READY</button>
         <button type="button" class="arcade-btn arcade-btn-secondary" id="btn-leave">Leave</button>
       </div>
+      ${
+        generating
+          ? `
+      <div class="lobby-kit-overlay" id="lobby-kit-overlay" role="status" aria-live="polite">
+        <div class="lobby-kit-overlay-card">
+          <p class="arcade-heading lobby-kit-overlay-title">BUILDING KIT</p>
+          <p class="arcade-hint lobby-kit-overlay-msg">${escapeHtml(kitMsg)}</p>
+          <div class="lobby-kit-progress" aria-hidden="true">
+            <div class="lobby-kit-progress-fill" style="width:${pct}%"></div>
+          </div>
+          <p class="arcade-hint lobby-kit-overlay-step">${step} / ${total}</p>
+        </div>
+      </div>`
+          : ""
+      }
     </div>
   `;
   root.dataset.selfId = selfId;
@@ -63,10 +83,12 @@ export function mountLobbyScreen(root, ctx) {
   const ws = ctx.mpWs;
   const playerId = ctx.playerId;
   let lobby = ctx.lobby;
+  /** @type {null | { step?: number; total?: number; message?: string; percent?: number }} */
+  let kitProgress = null;
   let preserveWs = false;
   let intentionalLeave = false;
 
-  const paint = () => renderLobby(root, lobby, playerId);
+  const paint = () => renderLobby(root, lobby, playerId, kitProgress);
 
   const errEl = () => root.querySelector("#lobby-err");
 
@@ -84,8 +106,13 @@ export function mountLobbyScreen(root, ctx) {
     } catch {
       return;
     }
+    if (m.type === "kit_progress") {
+      kitProgress = m;
+      paint();
+    }
     if (m.type === "lobby_update" && m.lobby) {
       lobby = m.lobby;
+      if (m.lobby.state !== "generating") kitProgress = null;
       paint();
     }
     if (m.type === "player_ready") {

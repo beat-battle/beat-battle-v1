@@ -11,7 +11,7 @@ import numpy as np
 import soundfile as sf
 
 from .audio_utils import SAMPLE_RATE, encode_audio_base64
-from .generator import generate_kit
+from .generator import generate_kit_light
 
 # Order returned to the web UI (matches generator / solo flow).
 API_SOUND_KEYS: tuple[str, ...] = (
@@ -42,7 +42,7 @@ def encode_paths_to_sounds(paths: dict[str, Path]) -> dict[str, str]:
 
 
 def kit_to_base64_payload(seed: int, spice: float, output_dir: Path) -> dict[str, Any]:
-    """Generate under ``output_dir`` and return ``{seed, sounds}`` for WebSocket clients."""
-    paths = generate_kit(seed=seed, spice=spice, output_dir=output_dir)
+    """Generate under ``output_dir`` and return ``{seed, sounds}`` (light: random samples, no DSP)."""
+    paths = generate_kit_light(seed=seed, spice=spice, output_dir=output_dir)
     sounds = encode_paths_to_sounds(paths)
     return {"seed": seed, "sounds": sounds}

@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import random
+import shutil
+import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
-
-import numpy as np
-import soundfile as sf
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, ORJSONResponse
@@ -24,10 +23,9 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from .auth import get_current_user, login_user, register_user
-from .audio_utils import SAMPLE_RATE, encode_audio_base64
 from .database import get_db, init_db
-from .generator import generate_kit
-from .kit_payload import API_SOUND_KEYS
+from .generator import generate_kit_light
+from .kit_payload import encode_paths_to_sounds
 from .models import User
 from .multiplayer import LobbyManager
 from .multiplayer.lobby import LobbyState
@@ -83,17 +81,14 @@ class GenerateRequest(BaseModel):
 
 
 def _solo_generate_sync(seed: int, spice: float) -> dict[str, Any]:
-    """Solo kit generation (CPU-bound; run in a thread pool)."""
-    paths = generate_kit(seed=seed, spice=spice)
-    sounds: dict[str, str] = {}
-    for key in API_SOUND_KEYS:
-        path = paths[key]
-        data, sr = sf.read(str(path), always_2d=False)
-        if int(sr) != int(SAMPLE_RATE):
-            raise ValueError(f"Unexpected sample rate {sr} for {key}, expected {SAMPLE_RATE}")
-        arr = np.asarray(data, dtype=np.float64)
-        sounds[key] = encode_audio_base64(arr, sr=int(sr))
-    return {"seed": seed, "sounds": sounds}
+    """Solo kit: random samples only (no heavy DSP); CPU-bound; run in a thread pool."""
+    tmp = tempfile.mkdtemp(prefix="solo_kit_")
+    try:
+        paths = generate_kit_light(seed=seed, spice=spice, output_dir=Path(tmp))
+        sounds = encode_paths_to_sounds(paths)
+        return {"seed": seed, "sounds": sounds}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 @app.post("/generate")
