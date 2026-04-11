@@ -35,7 +35,7 @@ UPLOAD_PHASE_S = 60
 # Seconds per beat in slideshow (1–45s playback) plus small pad before votes unlock.
 SLIDESHOW_SEGMENT_S = 46
 # Max time to collect votes after unlock.
-VOTING_COLLECT_S = 300
+VOTING_COLLECT_S = 30
 # Lobbies in results older than this are purged (uploads deleted).
 LOBBY_RESULTS_TTL_S = 3600
 

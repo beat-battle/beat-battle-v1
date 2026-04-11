@@ -36,12 +36,7 @@ export function playSfxBeatBattle() {
   playFile("BeatBattle.wav", 0.92);
 }
 
-/** Upload phase: 30 seconds left. */
-export function playSfxUploadWarning30() {
-  playFile("30SecWarning.wav", 0.9);
-}
-
-/** Upload phase: time expired. */
+/** Upload phase: window is open — time to upload your beat. */
 export function playSfxUploadAlarm() {
   playFile("Alarm.wav", 0.88);
 }

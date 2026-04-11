@@ -5,6 +5,10 @@ import { SYNTH_KEYS } from "./kitFromSeed.js";
 
 const REVEAL_STAGGER_MS = 1000;
 const SYNTH_PREVIEW_MAX_SEC = 2;
+/** Extra ms after expected playback; some Chromium/Brave builds skip `onended`. */
+const PREVIEW_END_GRACE_MS = 400;
+/** If drum fetch never settles, do not block the reveal forever. */
+const WAIT_FOR_DRUMS_MAX_MS = 120_000;
 
 function playSynthPreview(audioContext, buffer) {
   return new Promise((resolve, reject) => {
@@ -12,21 +16,46 @@ function playSynthPreview(audioContext, buffer) {
       resolve();
       return;
     }
-    const dur = Math.min(SYNTH_PREVIEW_MAX_SEC, buffer.duration);
-    if (dur <= 0) {
+    const rawDur = buffer.duration;
+    if (!Number.isFinite(rawDur) || rawDur <= 0) {
       resolve();
       return;
     }
+    const dur = Math.min(SYNTH_PREVIEW_MAX_SEC, rawDur);
     const src = audioContext.createBufferSource();
     src.buffer = buffer;
-    src.onended = () => resolve();
+    let settled = false;
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let watchdog;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (watchdog !== undefined) window.clearTimeout(watchdog);
+      try {
+        src.disconnect();
+      } catch {
+        /* ignore */
+      }
+      resolve();
+    };
+    src.onended = finish;
     src.connect(audioContext.destination);
-    void audioContext.resume().catch(() => {});
-    try {
-      src.start(0, 0, dur);
-    } catch (e) {
-      reject(e);
-    }
+    const ms = Math.ceil(dur * 1000) + PREVIEW_END_GRACE_MS;
+    watchdog = window.setTimeout(finish, ms);
+    void audioContext
+      .resume()
+      .catch(() => {})
+      .then(() => {
+        try {
+          src.start(0, 0, dur);
+        } catch (e) {
+          if (watchdog !== undefined) window.clearTimeout(watchdog);
+          if (!settled) {
+            settled = true;
+            reject(e);
+          }
+        }
+      });
   });
 }
 
@@ -36,9 +65,14 @@ function delay(ms) {
 
 function waitForDrums(drumsStillLoading) {
   return new Promise((resolve) => {
+    const t0 = Date.now();
     const tryFinish = () => {
       if (!drumsStillLoading()) {
         setTimeout(resolve, 160);
+        return;
+      }
+      if (Date.now() - t0 >= WAIT_FOR_DRUMS_MAX_MS) {
+        resolve();
         return;
       }
       setTimeout(tryFinish, 120);

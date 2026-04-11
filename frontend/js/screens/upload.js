@@ -3,7 +3,7 @@
  */
 import { authHeadersMultipart } from "../authApi.js";
 import { mountAuthCornerLeave } from "../authCorner.js";
-import { playSfxMajor, playSfxUploadAlarm, playSfxUploadWarning30 } from "../sfx.js";
+import { playSfxMajor, playSfxUploadAlarm } from "../sfx.js";
 import { mountVotingSlideshowScreen } from "./votingSlideshow.js";
 
 export function mountUploadScreen(root, ctx) {
@@ -16,8 +16,7 @@ export function mountUploadScreen(root, ctx) {
       ? rawDeadline
       : Date.now() / 1000 + 60;
   let preserveWs = false;
-  let warningPlayed = false;
-  let alarmPlayed = false;
+  let closedNotified = false;
   /** @type {ReturnType<typeof setInterval> | null} */
   let tickId = null;
 
@@ -58,19 +57,18 @@ export function mountUploadScreen(root, ctx) {
   const tick = () => {
     const remain = deadlineTs - Date.now() / 1000;
     if (timerEl) timerEl.textContent = formatRemain(remain);
-    if (!warningPlayed && remain > 0 && remain <= 30) {
-      warningPlayed = true;
-      playSfxUploadWarning30();
-    }
-    if (!alarmPlayed && remain <= 0) {
-      alarmPlayed = true;
-      playSfxUploadAlarm();
+    if (!closedNotified && remain <= 0) {
+      closedNotified = true;
       setUploadEnabled(false);
       if (statusEl && !statusEl.textContent.includes("Uploaded")) {
         statusEl.textContent = "Upload window closed.";
       }
     }
   };
+
+  if (deadlineTs - Date.now() / 1000 > 0) {
+    playSfxUploadAlarm();
+  }
 
   tick();
   tickId = window.setInterval(tick, 250);

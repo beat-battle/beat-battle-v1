@@ -89,7 +89,7 @@ def _normalize_player_spices(data: dict[str, Any]) -> list[float] | None:
 
 
 # Pre-game lobby emoji keys (client maps to Unicode).
-LOBBY_EMOJI_KEYS: frozenset[str] = frozenset({"wave", "thumbs_up", "fire", "clap", "heart"})
+LOBBY_EMOJI_KEYS: frozenset[str] = frozenset({"wave"})
 # Reactions while listening to beats in the voting slideshow.
 BEAT_REACTION_KEYS: frozenset[str] = frozenset({"fire", "thumbs_up", "thumbs_down", "hundred"})
 

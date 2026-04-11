@@ -184,8 +184,12 @@ function setupCookUI(root, ctx, sounds) {
   const lobbyId = ctx.lobbyId;
   const cookMin = Number(ctx.cookDurationMin) || 10;
   let remaining = cookMin * 60;
+  /** Wall-clock end of cook phase; updated by server `timer_update`, displayed via local tick. */
+  let cookEndAtMs = Date.now() + remaining * 1000;
   let preserveWs = false;
   let selfFinished = false;
+  /** @type {ReturnType<typeof setInterval> | null} */
+  let localTimerId = null;
 
   const waveSurfers = new Map();
   const clickFullPlayback = new Map();
@@ -207,6 +211,7 @@ function setupCookUI(root, ctx, sounds) {
     <div class="screen cook arcade-panel">
       <h2 class="arcade-heading">COOK TIMER</h2>
       <div class="cook-timer" id="cook-timer">00:00</div>
+      <p class="arcade-hint cook-connection-hint hidden" id="cook-connection-hint">Connection lost — timer may not match the server.</p>
       <p class="arcade-hint">Head to your DAW — kit is below. Download before time ends.</p>
       <div class="cook-actions">
         <button type="button" class="arcade-btn arcade-btn-secondary" id="mp-download-kit">Download kit (ZIP)</button>
@@ -319,7 +324,14 @@ function setupCookUI(root, ctx, sounds) {
   const tickTimer = () => {
     if (timerEl) timerEl.textContent = formatTime(remaining);
   };
-  tickTimer();
+
+  const syncRemainingFromDeadline = () => {
+    remaining = Math.max(0, Math.ceil((cookEndAtMs - Date.now()) / 1000));
+    tickTimer();
+  };
+
+  syncRemainingFromDeadline();
+  localTimerId = window.setInterval(syncRemainingFromDeadline, 1000);
 
   root.querySelector("#mp-download-kit")?.addEventListener("click", () => {
     playSfxMinor();
@@ -368,8 +380,11 @@ function setupCookUI(root, ctx, sounds) {
       return;
     }
     if (m.type === "timer_update" && m.phase === "cooking") {
-      remaining = m.remaining_s ?? remaining;
-      tickTimer();
+      const rs = m.remaining_s;
+      if (rs != null && Number.isFinite(Number(rs))) {
+        cookEndAtMs = Date.now() + Math.max(0, Number(rs)) * 1000;
+      }
+      syncRemainingFromDeadline();
     }
     if (m.type === "cook_finished_update" && Array.isArray(m.finished_player_ids)) {
       const n = m.finished_player_ids.length;
@@ -390,9 +405,28 @@ function setupCookUI(root, ctx, sounds) {
       });
     }
   };
+
+  const prevOnClose = ws.onclose;
+  ws.onclose = () => {
+    const hint = root.querySelector("#cook-connection-hint");
+    if (hint) hint.classList.remove("hidden");
+    if (typeof prevOnClose === "function") {
+      try {
+        prevOnClose();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
   ws.onmessage = onMessage;
 
   return () => {
+    if (localTimerId != null) {
+      clearInterval(localTimerId);
+      localTimerId = null;
+    }
+    ws.onclose = prevOnClose ?? null;
     destroyWaveSurfers();
     root.innerHTML = "";
     if (!preserveWs) {

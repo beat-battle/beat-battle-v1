@@ -6,43 +6,17 @@ import { escapeHtml, rankBadgeHtml } from "../rankUi.js";
 import { playSfxBeatBattle, playSfxMajor, playSfxMinor } from "../sfx.js";
 import { mountCookScreen } from "./cook.js";
 
-/** @type {Record<string, string>} */
-const LOBBY_EMOJI_CHARS = {
-  wave: "👋",
-  thumbs_up: "👍",
-  fire: "🔥",
-  clap: "👏",
-  heart: "❤️",
-};
-
-const LOBBY_EMOJI_KEYS = Object.keys(LOBBY_EMOJI_CHARS);
-
-/** @type {Record<string, string>} */
-const LOBBY_EMOJI_ARIA = {
-  wave: "Wave hello",
-  thumbs_up: "Thumbs up",
-  fire: "Fire",
-  clap: "Clap",
-  heart: "Heart",
-};
+const WAVE_TOAST_VISIBLE_MS = 1000;
+const WAVE_TOAST_FADE_MS = 200;
+const TOAST_HOST_ID = "lobby-wave-toast-host";
 
 /**
- * @param {string} name
- * @param {string} emojiKey
+ * @param {HTMLElement} root
+ * @param {object} lobby
+ * @param {string} selfId
+ * @param {null | { step?: number; total?: number; message?: string; percent?: number }} kitProgress
  */
-function lobbyEmojiLineHtml(name, emojiKey) {
-  const esc = escapeHtml(name);
-  if (emojiKey === "wave") {
-    return `<p class="lobby-chat-line"><em class="lobby-chat-name">${esc}</em> waved! <span class="lobby-chat-emoji" aria-hidden="true">${LOBBY_EMOJI_CHARS.wave}</span></p>`;
-  }
-  const ch = LOBBY_EMOJI_CHARS[emojiKey] || "·";
-  return `<p class="lobby-chat-line"><em class="lobby-chat-name">${esc}</em> <span class="lobby-chat-emoji" aria-hidden="true">${ch}</span></p>`;
-}
-
-/**
- * @param {string[]} linesHtml
- */
-function renderLobby(root, lobby, selfId, kitProgress, linesHtml) {
+function renderLobby(root, lobby, selfId, kitProgress) {
   const players = lobby.players || [];
   const hostId = lobby.host_id || "";
   const isHost = Boolean(selfId && hostId && selfId === hostId);
@@ -92,14 +66,10 @@ function renderLobby(root, lobby, selfId, kitProgress, linesHtml) {
         generating
           ? ""
           : `
-      <div class="lobby-chat-wrap">
-        <p class="arcade-label lobby-chat-label">Quick chat</p>
-        <div class="lobby-chat-feed" id="lobby-chat-feed" aria-live="polite">${linesHtml.join("")}</div>
-        <div class="lobby-emoji-bar" role="group" aria-label="Send an emoji">
-          ${LOBBY_EMOJI_KEYS.map(
-            (k) =>
-              `<button type="button" class="lobby-emoji-btn" data-lobby-emoji="${k}" aria-label="${LOBBY_EMOJI_ARIA[k] || "Send emoji"}">${LOBBY_EMOJI_CHARS[k]}</button>`,
-          ).join("")}
+      <div class="lobby-wave-wrap">
+        <p class="arcade-label lobby-wave-label">Wave hello</p>
+        <div class="lobby-wave-row">
+          <button type="button" class="lobby-emoji-btn lobby-wave-btn" data-lobby-emoji="wave" aria-label="Wave hello">👋</button>
         </div>
       </div>`
       }
@@ -134,13 +104,65 @@ export function mountLobbyScreen(root, ctx) {
   let lobby = ctx.lobby;
   /** @type {null | { step?: number; total?: number; message?: string; percent?: number }} */
   let kitProgress = null;
-  /** @type {string[]} */
-  let chatLinesHtml = [];
-  const MAX_LOBBY_CHAT = 10;
   let preserveWs = false;
   let intentionalLeave = false;
 
-  const paint = () => renderLobby(root, lobby, playerId, kitProgress, chatLinesHtml);
+  /** @type {Set<ReturnType<typeof setTimeout>>} */
+  const waveToastTimeouts = new Set();
+
+  const clearWaveToastTimers = () => {
+    waveToastTimeouts.forEach((id) => clearTimeout(id));
+    waveToastTimeouts.clear();
+  };
+
+  const removeWaveToastHost = () => {
+    document.getElementById(TOAST_HOST_ID)?.remove();
+  };
+
+  /**
+   * @param {string} name
+   */
+  const showLobbyWaveToast = (name) => {
+    let host = document.getElementById(TOAST_HOST_ID);
+    if (!host) {
+      host = document.createElement("div");
+      host.id = TOAST_HOST_ID;
+      host.className = "lobby-wave-toast-host";
+      host.setAttribute("aria-live", "polite");
+      document.body.appendChild(host);
+    }
+
+    const card = document.createElement("div");
+    card.className = "lobby-wave-toast";
+    card.setAttribute("role", "status");
+    const nameEl = document.createElement("span");
+    nameEl.className = "lobby-wave-toast-name";
+    nameEl.textContent = name;
+    const emojiEl = document.createElement("span");
+    emojiEl.className = "lobby-wave-toast-emoji";
+    emojiEl.setAttribute("aria-hidden", "true");
+    emojiEl.textContent = "👋";
+    card.append(nameEl, emojiEl);
+    host.appendChild(card);
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => card.classList.add("lobby-wave-toast--visible"));
+    });
+
+    const hide = window.setTimeout(() => {
+      waveToastTimeouts.delete(hide);
+      card.classList.remove("lobby-wave-toast--visible");
+      const remove = window.setTimeout(() => {
+        waveToastTimeouts.delete(remove);
+        card.remove();
+        if (host && host.childElementCount === 0) removeWaveToastHost();
+      }, WAVE_TOAST_FADE_MS);
+      waveToastTimeouts.add(remove);
+    }, WAVE_TOAST_VISIBLE_MS);
+    waveToastTimeouts.add(hide);
+  };
+
+  const paint = () => renderLobby(root, lobby, playerId, kitProgress);
 
   const errEl = () => root.querySelector("#lobby-err");
 
@@ -170,11 +192,8 @@ export function mountLobbyScreen(root, ctx) {
     if (m.type === "player_ready") {
       /* lobby_update follows */
     }
-    if (m.type === "lobby_emoji" && m.emoji && m.name) {
-      chatLinesHtml = [...chatLinesHtml, lobbyEmojiLineHtml(String(m.name), String(m.emoji))].slice(
-        -MAX_LOBBY_CHAT,
-      );
-      paint();
+    if (m.type === "lobby_emoji" && m.emoji === "wave" && m.name) {
+      showLobbyWaveToast(String(m.name));
     }
     if (m.type === "error") {
       const e = errEl();
@@ -237,7 +256,7 @@ export function mountLobbyScreen(root, ctx) {
     const t = e.target;
     const origin = t instanceof Element ? t : t && "parentElement" in t ? t.parentElement : null;
     const emojiBtn = origin?.closest?.("[data-lobby-emoji]");
-    if (emojiBtn instanceof HTMLButtonElement && emojiBtn.dataset.lobbyEmoji) {
+    if (emojiBtn instanceof HTMLButtonElement && emojiBtn.dataset.lobbyEmoji === "wave") {
       playSfxMinor();
       if (ws.readyState !== WebSocket.OPEN) {
         const err = errEl();
@@ -245,12 +264,7 @@ export function mountLobbyScreen(root, ctx) {
         return;
       }
       try {
-        ws.send(
-          JSON.stringify({
-            type: "lobby_emoji",
-            emoji: emojiBtn.dataset.lobbyEmoji,
-          }),
-        );
+        ws.send(JSON.stringify({ type: "lobby_emoji", emoji: "wave" }));
       } catch {
         /* ignore */
       }
@@ -297,6 +311,8 @@ export function mountLobbyScreen(root, ctx) {
     root.removeEventListener("click", clickHandler);
     root.removeEventListener("change", changeHandler);
     root.innerHTML = "";
+    clearWaveToastTimers();
+    removeWaveToastHost();
     ws.onclose = null;
     if (!preserveWs) {
       try {
