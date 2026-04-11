@@ -1,37 +1,62 @@
 """
-SQLite engine and session factory for CookUp accounts.
+SQLAlchemy engine: PostgreSQL (Neon) when DATABASE_URL is set, else local SQLite.
 """
 
 from __future__ import annotations
 
+import os
+from collections.abc import Generator
 from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, event
-from collections.abc import Generator
-
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATABASE_URL = f"sqlite:///{_PROJECT_ROOT / 'cookup.db'}"
-
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    pool_pre_ping=True,
-)
+load_dotenv(_PROJECT_ROOT / ".env")
 
 
-@event.listens_for(engine, "connect")
-def _sqlite_pragmas(dbapi_conn, _connection_record) -> None:
-    """Better concurrency and fewer lock errors under load (WAL + busy timeout)."""
-    cur = dbapi_conn.cursor()
-    cur.execute("PRAGMA journal_mode=WAL")
-    cur.execute("PRAGMA synchronous=NORMAL")
-    cur.execute("PRAGMA foreign_keys=ON")
-    cur.execute("PRAGMA busy_timeout=5000")
-    cur.close()
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+def _resolve_database_url() -> str:
+    raw = os.environ.get("DATABASE_URL", "").strip()
+    if not raw:
+        return f"sqlite:///{_PROJECT_ROOT / 'cookup.db'}"
+    # Heroku / some hosts use postgres://; SQLAlchemy expects postgresql://
+    if raw.startswith("postgres://"):
+        raw = "postgresql://" + raw[len("postgres://") :]
+    return raw
+
+
+DATABASE_URL = _resolve_database_url()
+
+_IS_SQLITE = DATABASE_URL.startswith("sqlite")
+
+if _IS_SQLITE:
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        pool_pre_ping=True,
+    )
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _connection_record) -> None:
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.execute("PRAGMA foreign_keys=ON")
+        cur.execute("PRAGMA busy_timeout=5000")
+        cur.close()
+else:
+    # Neon: use the pooled connection string from the dashboard when possible.
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=5,
+        connect_args={"connect_timeout": 10},
+    )
+
 Base = declarative_base()
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_db() -> Generator[Session, None, None]:
