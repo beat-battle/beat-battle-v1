@@ -14,7 +14,7 @@ export function mountUploadScreen(root, ctx) {
   const deadlineTs =
     typeof rawDeadline === "number" && Number.isFinite(rawDeadline)
       ? rawDeadline
-      : Date.now() / 1000 + 60;
+      : Date.now() / 1000 + 90;
   let preserveWs = false;
   let closedNotified = false;
   /** @type {ReturnType<typeof setInterval> | null} */
@@ -25,8 +25,8 @@ export function mountUploadScreen(root, ctx) {
   root.innerHTML = `
     <div class="screen upload arcade-panel">
       <h2 class="arcade-heading">UPLOAD BEAT</h2>
-      <p class="upload-timer" id="upload-timer" aria-live="polite">1:00</p>
-      <p class="arcade-hint">1 minute · MP3 or WAV · max 15MB</p>
+      <p class="upload-timer" id="upload-timer" aria-live="polite">1:30</p>
+      <p class="arcade-hint">1:30 · MP3 or WAV · max 15MB</p>
       <p class="arcade-hint upload-hint-muted">After time runs out you can still vote and listen, but others won’t hear your beat.</p>
       <form id="upload-form" class="upload-form">
         <input type="file" id="beat-file" accept=".mp3,.wav,audio/mpeg,audio/wav" required />

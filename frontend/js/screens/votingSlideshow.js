@@ -3,7 +3,6 @@
  */
 import { authHeadersMultipart } from "../authApi.js";
 import { mountAuthCornerLeave } from "../authCorner.js";
-import { escapeHtml } from "../rankUi.js";
 import { playSfxMinor } from "../sfx.js";
 import { mountVoteSelectionScreen } from "./voteSelection.js";
 
@@ -26,6 +25,10 @@ const BEAT_REACTION_ARIA = {
 };
 
 const CLIP_MAX_SEC = 45;
+
+const BEAT_TOAST_VISIBLE_MS = 1000;
+const BEAT_TOAST_FADE_MS = 200;
+const BEAT_TOAST_HOST_ID = "beat-reaction-toast-host";
 
 function getWaveSurfer() {
   const g = globalThis;
@@ -124,7 +127,6 @@ export function mountVotingSlideshowScreen(root, ctx) {
       <p class="slide-player" id="slide-player"></p>
       <div id="slide-wave" class="slideshow-wave"></div>
       <div class="slideshow-reactions" id="slideshow-reactions" hidden>
-        <p class="arcade-label slideshow-reactions-label">React</p>
         <div class="slideshow-reaction-btns" role="group" aria-label="Beat reactions">
           ${BEAT_REACTION_KEYS.map(
             (k) =>
@@ -132,7 +134,6 @@ export function mountVotingSlideshowScreen(root, ctx) {
           ).join("")}
         </div>
       </div>
-      <div class="slideshow-reaction-feed" id="slideshow-reaction-feed" aria-live="polite"></div>
       <p class="arcade-hint" id="slide-progress"></p>
     </div>
   `;
@@ -142,7 +143,63 @@ export function mountVotingSlideshowScreen(root, ctx) {
   const waveEl = root.querySelector("#slide-wave");
   const progEl = root.querySelector("#slide-progress");
   const reactionsEl = root.querySelector("#slideshow-reactions");
-  const reactionFeedEl = root.querySelector("#slideshow-reaction-feed");
+
+  /** @type {Set<ReturnType<typeof setTimeout>>} */
+  const beatToastTimeouts = new Set();
+
+  const clearBeatToastTimers = () => {
+    beatToastTimeouts.forEach((id) => clearTimeout(id));
+    beatToastTimeouts.clear();
+  };
+
+  const removeBeatToastHost = () => {
+    document.getElementById(BEAT_TOAST_HOST_ID)?.remove();
+  };
+
+  /**
+   * @param {string} fromName
+   * @param {string} reactionKey
+   */
+  const showBeatReactionToast = (fromName, reactionKey) => {
+    const ch = BEAT_REACTION_EMOJI[reactionKey] || "·";
+    let host = document.getElementById(BEAT_TOAST_HOST_ID);
+    if (!host) {
+      host = document.createElement("div");
+      host.id = BEAT_TOAST_HOST_ID;
+      host.className = "lobby-wave-toast-host";
+      host.setAttribute("aria-live", "polite");
+      document.body.appendChild(host);
+    }
+
+    const card = document.createElement("div");
+    card.className = "lobby-wave-toast";
+    card.setAttribute("role", "status");
+    const toastName = document.createElement("span");
+    toastName.className = "lobby-wave-toast-name";
+    toastName.textContent = fromName;
+    const emojiEl = document.createElement("span");
+    emojiEl.className = "lobby-wave-toast-emoji";
+    emojiEl.setAttribute("aria-hidden", "true");
+    emojiEl.textContent = ch;
+    card.append(toastName, emojiEl);
+    host.appendChild(card);
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => card.classList.add("lobby-wave-toast--visible"));
+    });
+
+    const hide = window.setTimeout(() => {
+      beatToastTimeouts.delete(hide);
+      card.classList.remove("lobby-wave-toast--visible");
+      const remove = window.setTimeout(() => {
+        beatToastTimeouts.delete(remove);
+        card.remove();
+        if (host && host.childElementCount === 0) removeBeatToastHost();
+      }, BEAT_TOAST_FADE_MS);
+      beatToastTimeouts.add(remove);
+    }, BEAT_TOAST_VISIBLE_MS);
+    beatToastTimeouts.add(hide);
+  };
 
   const goVote = () => {
     preserveWs = true;
@@ -176,7 +233,8 @@ export function mountVotingSlideshowScreen(root, ctx) {
     }
     const b = beats[idx];
     currentBeatOwnerId = b.player_id || null;
-    if (reactionFeedEl) reactionFeedEl.innerHTML = "";
+    clearBeatToastTimers();
+    removeBeatToastHost();
     const listeningOthers = b.player_id && b.player_id !== playerId;
     if (reactionsEl) {
       reactionsEl.hidden = !listeningOthers;
@@ -298,15 +356,8 @@ export function mountVotingSlideshowScreen(root, ctx) {
   };
 
   const appendReactionLine = (fromName, reactionKey) => {
-    if (!reactionFeedEl || !currentBeatOwnerId) return;
-    const ch = BEAT_REACTION_EMOJI[reactionKey] || "·";
-    const line = document.createElement("p");
-    line.className = "slideshow-reaction-line";
-    line.innerHTML = `<em class="slideshow-reaction-name">${escapeHtml(fromName)}</em> <span class="slideshow-reaction-emoji" aria-hidden="true">${ch}</span>`;
-    reactionFeedEl.appendChild(line);
-    while (reactionFeedEl.children.length > 6) {
-      reactionFeedEl.removeChild(reactionFeedEl.firstChild);
-    }
+    if (!currentBeatOwnerId) return;
+    showBeatReactionToast(fromName, reactionKey);
   };
 
   const reactionClick = (e) => {
@@ -349,6 +400,7 @@ export function mountVotingSlideshowScreen(root, ctx) {
         ctx.navigate(mod.mountResultsScreen, {
           mpWs: wsSock,
           results: m,
+          playerId,
         });
       });
     }
@@ -362,6 +414,8 @@ export function mountVotingSlideshowScreen(root, ctx) {
   }
 
   return () => {
+    clearBeatToastTimers();
+    removeBeatToastHost();
     reactionsEl?.removeEventListener("click", reactionClick);
     if (slideObjectUrl) {
       URL.revokeObjectURL(slideObjectUrl);

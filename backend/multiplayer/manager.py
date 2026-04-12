@@ -23,6 +23,7 @@ from .lobby import (
     COOK_DURATION_MIN_OPTIONS,
     COOK_DURATION_S,
     LOBBY_RESULTS_TTL_S,
+    MAX_LOBBY_PLAYERS,
     SLIDESHOW_SEGMENT_S,
     UPLOAD_PHASE_S,
     VOTING_COLLECT_S,
@@ -275,7 +276,7 @@ class LobbyManager:
                     {"type": "error", "message": "That match already started or ended."},
                 )
                 return
-            if len(lobby.players) >= 5:
+            if len(lobby.players) >= MAX_LOBBY_PLAYERS:
                 await self.send_to(player_id, {"type": "error", "message": "Lobby is full."})
                 return
             if self._lobby_has_user_id(lobby, user_id):
@@ -326,7 +327,7 @@ class LobbyManager:
                     {"type": "error", "message": "That match already started or ended."},
                 )
                 return
-            if len(lobby.players) >= 5:
+            if len(lobby.players) >= MAX_LOBBY_PLAYERS:
                 await self.send_to(player_id, {"type": "error", "message": "Lobby is full."})
                 return
             if self._lobby_has_user_id(lobby, user_id):
@@ -351,14 +352,14 @@ class LobbyManager:
                     continue
                 if not L.is_public:
                     continue
-                if len(L.players) >= 5:
+                if len(L.players) >= MAX_LOBBY_PLAYERS:
                     continue
                 out.append(
                     {
                         "lobby_id": lid,
                         "spice": L.spice,
                         "player_count": len(L.players),
-                        "max_players": 5,
+                        "max_players": MAX_LOBBY_PLAYERS,
                     }
                 )
             return sorted(out, key=lambda x: x["lobby_id"])
@@ -402,7 +403,7 @@ class LobbyManager:
                     player_id,
                     {
                         "type": "error",
-                        "message": "Invalid duration. Use 5, 10, 15, or 20 minutes.",
+                        "message": "Invalid duration. Use 5, 10, 15, 20, or 30 minutes.",
                     },
                 )
                 return
@@ -504,7 +505,9 @@ class LobbyManager:
             lobby = self.lobbies.get(lobby_id)
             if not lobby:
                 return
-            duration_s = max(60, min(20 * 60, int(lobby.cook_duration_min) * 60))
+            duration_s = max(
+                60, min(max(COOK_DURATION_MIN_OPTIONS) * 60, int(lobby.cook_duration_min) * 60)
+            )
 
         early_all_done = False
         try:
@@ -704,6 +707,18 @@ class LobbyManager:
                 lobby.players[w].user_id for w in winners if w in lobby.players
             ]
 
+            beats_out: list[dict[str, Any]] = []
+            for owner_id in sorted(lobby.uploaded, key=lambda x: x):
+                pl = lobby.players.get(owner_id)
+                nm = pl.name if pl else owner_id
+                beats_out.append(
+                    {
+                        "player_id": owner_id,
+                        "name": nm,
+                        "url": f"/beats/{lobby_id}/{owner_id}",
+                    }
+                )
+
         await self.broadcast(
             lobby_id,
             {
@@ -712,6 +727,7 @@ class LobbyManager:
                 "winners": winner_names,
                 "winner_ids": winners,
                 "leaderboard": leaderboard,
+                "beats": beats_out,
             },
         )
 

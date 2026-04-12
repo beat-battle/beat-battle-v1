@@ -103,7 +103,7 @@ export function mountVoteSelectionScreen(root, ctx) {
     }
     if (m.type === "results") {
       preserveWs = true;
-      ctx.navigate(mountResultsScreen, { mpWs: wsSock, results: m });
+      ctx.navigate(mountResultsScreen, { mpWs: wsSock, results: m, playerId });
     }
   };
   wsSock.onmessage = onMessage;

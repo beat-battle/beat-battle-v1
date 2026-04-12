@@ -28,16 +28,19 @@ def canonical_spice(value: float) -> float | None:
 
 COOK_DURATION_S = 600
 # Host-selectable cook length (minutes); UI/backend clamp to these values.
-COOK_DURATION_MIN_OPTIONS: tuple[int, ...] = (5, 10, 15, 20)
+COOK_DURATION_MIN_OPTIONS: tuple[int, ...] = (5, 10, 15, 20, 30)
 DEFAULT_COOK_DURATION_MIN = 10
-# Upload window after cook ends (1 minute).
-UPLOAD_PHASE_S = 60
+# Upload window after cook ends (1 minute 30 seconds).
+UPLOAD_PHASE_S = 90
 # Seconds per beat in slideshow (1–45s playback) plus small pad before votes unlock.
 SLIDESHOW_SEGMENT_S = 46
 # Max time to collect votes after unlock.
 VOTING_COLLECT_S = 30
 # Lobbies in results older than this are purged (uploads deleted).
 LOBBY_RESULTS_TTL_S = 3600
+
+# Max players per lobby (join + server browser).
+MAX_LOBBY_PLAYERS = 8
 
 
 class LobbyState(str, Enum):

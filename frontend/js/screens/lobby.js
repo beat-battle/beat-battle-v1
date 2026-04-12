@@ -51,6 +51,7 @@ function renderLobby(root, lobby, selfId, kitProgress) {
         <option value="10"${cookMin === 10 ? " selected" : ""}>10 min</option>
         <option value="15"${cookMin === 15 ? " selected" : ""}>15 min</option>
         <option value="20"${cookMin === 20 ? " selected" : ""}>20 min</option>
+        <option value="30"${cookMin === 30 ? " selected" : ""}>30 min</option>
       </select>
     </div>
   `
@@ -67,7 +68,6 @@ function renderLobby(root, lobby, selfId, kitProgress) {
           ? ""
           : `
       <div class="lobby-wave-wrap">
-        <p class="arcade-label lobby-wave-label">Wave hello</p>
         <div class="lobby-wave-row">
           <button type="button" class="lobby-emoji-btn lobby-wave-btn" data-lobby-emoji="wave" aria-label="Wave hello">👋</button>
         </div>

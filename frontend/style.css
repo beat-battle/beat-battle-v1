@@ -727,14 +727,15 @@ audio {
 }
 
 .lobby-wave-wrap {
-  margin: 1rem 0 0;
-  padding: 0.75rem 0 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.lobby-wave-label {
-  margin-bottom: 0.5rem;
-  text-align: center;
+  position: fixed;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  margin: 0;
+  padding: 0;
+  border: none;
+  pointer-events: auto;
 }
 
 .lobby-wave-row {
@@ -750,7 +751,7 @@ audio {
 
 .lobby-wave-toast-host {
   position: fixed;
-  bottom: 1.25rem;
+  bottom: calc(1.25rem + 2.75rem + 0.5rem);
   left: 50%;
   transform: translateX(-50%);
   z-index: 80;
@@ -885,10 +886,6 @@ audio {
   text-align: center;
 }
 
-.slideshow-reactions-label {
-  margin-bottom: 0.45rem;
-}
-
 .slideshow-reaction-btns {
   display: flex;
   flex-wrap: wrap;
@@ -915,26 +912,6 @@ audio {
 .slideshow-reaction-btn:hover {
   border-color: var(--red);
   background: rgba(20, 8, 8, 0.9);
-}
-
-.slideshow-reaction-feed {
-  margin: 0.5rem 0 0;
-  min-height: 0;
-  max-height: 5rem;
-  overflow-y: auto;
-  font-size: 0.68rem;
-  line-height: 1.4;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.slideshow-reaction-line {
-  margin: 0.1rem 0;
-}
-
-.slideshow-reaction-name {
-  font-style: italic;
-  color: var(--text-heading);
 }
 
 .vote-cards {
@@ -980,6 +957,55 @@ audio {
 
 .results-rank {
   color: var(--red);
+}
+
+.results-beats-section {
+  margin: 1.75rem 0 1.25rem;
+  width: 100%;
+}
+
+.results-beats-hint {
+  margin: 0 0 0.85rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.results-beats-miss {
+  margin: 1rem 0;
+}
+
+.results-beat-grid .results-beat-card {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.results-beat-grid--reveal .results-beat-card {
+  animation: results-beat-enter 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: calc(var(--stagger, 0) * 55ms);
+}
+
+@keyframes results-beat-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .results-beat-grid .results-beat-card {
+    opacity: 1;
+    transform: none;
+  }
+
+  .results-beat-grid--reveal .results-beat-card {
+    animation: none;
+  }
 }
 
 .upload-timer {
@@ -1205,6 +1231,7 @@ audio {
 
 .screen.lobby {
   position: relative;
+  padding-bottom: 5.5rem;
 }
 
 .lobby-kit-overlay {
