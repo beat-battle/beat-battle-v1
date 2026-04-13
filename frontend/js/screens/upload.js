@@ -50,13 +50,6 @@ export function mountUploadScreen(root, ctx) {
   const form = root.querySelector("#upload-form");
   const statusEl = root.querySelector("#upload-status");
   const timerEl = root.querySelector("#upload-timer");
-  const fileInput = root.querySelector("#beat-file");
-  const submitBtn = root.querySelector("#upload-submit");
-
-  const setUploadEnabled = (on) => {
-    if (fileInput instanceof HTMLInputElement) fileInput.disabled = !on;
-    if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = !on;
-  };
 
   const formatRemain = (sec) => {
     const s = Math.max(0, Math.ceil(sec));
@@ -70,9 +63,8 @@ export function mountUploadScreen(root, ctx) {
     if (timerEl) timerEl.textContent = formatRemain(remain);
     if (!closedNotified && remain <= 0) {
       closedNotified = true;
-      setUploadEnabled(false);
       if (statusEl && !statusEl.textContent.includes("Uploaded")) {
-        statusEl.textContent = "Upload window closed.";
+        statusEl.textContent = "Timer at 0 — you can still try to upload.";
       }
     }
   };
@@ -86,7 +78,6 @@ export function mountUploadScreen(root, ctx) {
 
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (deadlineTs - Date.now() / 1000 <= 0) return;
     const input = root.querySelector("#beat-file");
     const file = input?.files?.[0];
     if (!file) return;

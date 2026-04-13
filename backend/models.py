@@ -29,3 +29,13 @@ class SiteStats(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     total_visits: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class Supporter(Base):
+    """Display names (lowercase key) for in-game supporter hearts; unique per normalized name."""
+
+    __tablename__ = "supporters"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name_key: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

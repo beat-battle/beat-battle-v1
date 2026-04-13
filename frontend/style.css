@@ -1853,6 +1853,46 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   font-variant-numeric: tabular-nums;
 }
 
+.dev-stats-panel__row--block {
+  white-space: normal;
+  word-break: break-word;
+  margin-top: 0.35rem;
+}
+
+.dev-stats-panel__row--supporter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+  margin-top: 0.3rem;
+  white-space: normal;
+}
+
+.dev-stats-panel__input {
+  flex: 1 1 6rem;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.65rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  background: rgba(0, 0, 0, 0.35);
+  color: inherit;
+}
+
+.dev-stats-panel__mini-btn {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
+}
+
+.dev-stats-panel__hint {
+  margin: 0.25rem 0 0;
+  min-height: 0.9rem;
+  font-size: 0.55rem;
+  color: rgba(250, 250, 250, 0.55);
+}
+
 .arcade-actions--mode {
   max-width: 280px;
   margin-left: auto;

@@ -4,6 +4,7 @@
 import { loginUser } from "../authApi.js";
 import { mountAuthCornerLoginGuest } from "../authCorner.js";
 import { initDevStatsPanel } from "../devStatsPanel.js";
+import { refreshSupportersFromApi } from "../supporters.js";
 import { playSfxMajor } from "../sfx.js";
 import { mountModeSelectScreen } from "./modeSelect.js";
 
@@ -44,6 +45,7 @@ export function mountLoginScreen(root, ctx) {
     playSfxMajor();
     try {
       await loginUser(u, p);
+      void refreshSupportersFromApi();
       initDevStatsPanel();
       ctx.navigate(mountModeSelectScreen);
     } catch (e) {

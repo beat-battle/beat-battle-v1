@@ -2,7 +2,7 @@
  * Multiplayer session chat: shared log + fixed composer (ASCII text + quick emoji).
  */
 import { escapeHtml } from "./rankUi.js";
-import { supporterDisplayNameInnerHtml } from "./supporters.js";
+import { subscribeSupporterList, supporterDisplayNameInnerHtml } from "./supporters.js";
 import { playSfxMinor } from "./sfx.js";
 
 const BUFFER_MAX = 50;
@@ -204,6 +204,7 @@ export function mountMpChat({ ws, playerId }) {
   };
 
   logSubscribers.add(redraw);
+  const unsubSupporters = subscribeSupporterList(redraw);
   redraw();
 
   if (input instanceof HTMLInputElement) {
@@ -267,6 +268,7 @@ export function mountMpChat({ ws, playerId }) {
   });
 
   return () => {
+    unsubSupporters();
     logSubscribers.delete(redraw);
     document.body.classList.remove("mp-chat-open");
     wrap.remove();

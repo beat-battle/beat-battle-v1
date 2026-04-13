@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import desc
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .auth import get_current_user, login_user, register_user
@@ -27,7 +28,7 @@ from .database import get_db, init_db
 from .generator import generate_kit_light
 from .kit_manifest import build_kit_manifest
 from .kit_payload import encode_paths_to_sounds
-from .models import SiteStats, User
+from .models import SiteStats, Supporter, User
 from .multiplayer import LobbyManager
 from .multiplayer.lobby import LobbyState
 from .multiplayer.ws import router as ws_router
@@ -55,6 +56,15 @@ _ALLOWED_DEV_STATS_USERS = frozenset({"psyalysis", "polystalgia"})
 def _require_dev_stats_user(user: User) -> None:
     if user.username.lower() not in _ALLOWED_DEV_STATS_USERS:
         raise HTTPException(status_code=403, detail="Not allowed.")
+
+
+def _normalize_supporter_name(raw: str) -> str:
+    s = raw.strip().lower()
+    if not s:
+        raise HTTPException(status_code=400, detail="Name required.")
+    if len(s) > 64:
+        raise HTTPException(status_code=400, detail="Name too long.")
+    return s
 
 
 def _increment_total_visits(db: Session) -> int:
@@ -165,6 +175,50 @@ async def get_dev_site_stats(
         "servers_open": len(manager.lobbies),
         "total_visits": _get_total_visits(db),
     }
+
+
+@app.get("/api/supporters")
+def get_supporters(db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Public list of supporter display-name keys (lowercase); used for hearts in UI."""
+    rows = db.query(Supporter).order_by(Supporter.name_key).all()
+    return {"names": [r.name_key for r in rows]}
+
+
+class SupporterAddBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+
+
+@app.post("/api/dev/supporters")
+def post_dev_supporter(
+    body: SupporterAddBody,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    _require_dev_stats_user(user)
+    key = _normalize_supporter_name(body.name)
+    db.add(Supporter(name_key=key))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Already exists.")
+    return {"ok": True, "name_key": key}
+
+
+@app.delete("/api/dev/supporters")
+def delete_dev_supporter(
+    name: str = Query(..., min_length=1, max_length=64),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    _require_dev_stats_user(user)
+    key = _normalize_supporter_name(name)
+    row = db.query(Supporter).filter(Supporter.name_key == key).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Not found.")
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
 
 
 @app.post("/register", response_model=RegisterResponse)

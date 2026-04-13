@@ -3,6 +3,7 @@
  */
 import { getApiBase } from "./apiOrigin.js";
 import { authBearerOnly, getUsername, isLoggedIn } from "./authApi.js";
+import { refreshSupportersFromApi } from "./supporters.js";
 
 const ALLOWED = new Set(["psyalysis", "polystalgia"]);
 const POLL_MS = 8000;
@@ -53,6 +54,10 @@ function wireTabToggle(el) {
 
 function ensureEl() {
   let el = document.getElementById("dev-stats-panel");
+  if (el && !el.querySelector("#dev-supporter-list")) {
+    el.remove();
+    el = null;
+  }
   if (!el) {
     el = document.createElement("div");
     el.id = "dev-stats-panel";
@@ -65,14 +70,115 @@ function ensureEl() {
         <div class="dev-stats-panel__row">Players online: <span id="dev-stat-players">—</span></div>
         <div class="dev-stats-panel__row">Servers open: <span id="dev-stat-servers">—</span></div>
         <div class="dev-stats-panel__row">Total visits: <span id="dev-stat-visits">—</span></div>
+        <div class="dev-stats-panel__label">Supporters</div>
+        <div class="dev-stats-panel__row dev-stats-panel__row--block">Names: <span id="dev-supporter-list">—</span></div>
+        <div class="dev-stats-panel__row dev-stats-panel__row--supporter-form">
+          <input type="text" id="dev-supporter-input" class="dev-stats-panel__input" maxlength="64" placeholder="name" autocomplete="off" aria-label="Supporter display name" />
+          <button type="button" class="arcade-btn dev-stats-panel__mini-btn" id="dev-supporter-add">Add</button>
+          <button type="button" class="arcade-btn dev-stats-panel__mini-btn" id="dev-supporter-remove">Remove</button>
+        </div>
+        <p class="dev-stats-panel__hint" id="dev-supporter-msg" aria-live="polite"></p>
       </div>
       <button type="button" class="dev-stats-panel__tab" aria-expanded="false" aria-controls="dev-stats-card">Dev</button>
     `;
     document.body.appendChild(el);
     applyExpandedFromStorage(el);
     wireTabToggle(el);
+    wireSupportersDevUi(el);
   }
   return el;
+}
+
+async function updateDevSupporterListRow(panelEl) {
+  const listEl = panelEl.querySelector("#dev-supporter-list");
+  if (!listEl) return;
+  const base = getApiBase();
+  const res = await fetch(`${base}/api/supporters`);
+  if (!res.ok) {
+    listEl.textContent = "—";
+    return;
+  }
+  const data = await res.json();
+  const names = Array.isArray(data.names) ? data.names : [];
+  listEl.textContent = names.length ? names.join(", ") : "—";
+}
+
+function wireSupportersDevUi(el) {
+  if (el.dataset.devSupportersWired) return;
+  el.dataset.devSupportersWired = "1";
+  const base = getApiBase();
+  const input = el.querySelector("#dev-supporter-input");
+  const addBtn = el.querySelector("#dev-supporter-add");
+  const rmBtn = el.querySelector("#dev-supporter-remove");
+  const msg = el.querySelector("#dev-supporter-msg");
+
+  const setMsg = (t) => {
+    if (msg) msg.textContent = t || "";
+  };
+
+  addBtn?.addEventListener("click", async () => {
+    const raw = input instanceof HTMLInputElement ? input.value : "";
+    const name = raw.trim();
+    if (!name) {
+      setMsg("Enter a name.");
+      return;
+    }
+    setMsg("");
+    const res = await fetch(`${base}/api/dev/supporters`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authBearerOnly() },
+      body: JSON.stringify({ name }),
+    });
+    if (res.status === 401 || res.status === 403) {
+      setMsg("Not allowed.");
+      return;
+    }
+    if (res.status === 409) {
+      setMsg("Already listed.");
+      return;
+    }
+    if (!res.ok) {
+      setMsg("Could not add.");
+      return;
+    }
+    if (input instanceof HTMLInputElement) input.value = "";
+    await refreshSupportersFromApi();
+    await updateDevSupporterListRow(el);
+    setMsg("Added.");
+    window.setTimeout(() => setMsg(""), 2000);
+  });
+
+  rmBtn?.addEventListener("click", async () => {
+    const raw = input instanceof HTMLInputElement ? input.value : "";
+    const name = raw.trim();
+    if (!name) {
+      setMsg("Enter a name to remove.");
+      return;
+    }
+    setMsg("");
+    const q = new URLSearchParams({ name });
+    const res = await fetch(`${base}/api/dev/supporters?${q}`, {
+      method: "DELETE",
+      headers: authBearerOnly(),
+    });
+    if (res.status === 401 || res.status === 403) {
+      setMsg("Not allowed.");
+      return;
+    }
+    if (res.status === 404) {
+      setMsg("Not in list.");
+      return;
+    }
+    if (!res.ok) {
+      setMsg("Could not remove.");
+      return;
+    }
+    if (input instanceof HTMLInputElement) input.value = "";
+    await refreshSupportersFromApi();
+    await updateDevSupporterListRow(el);
+    setMsg("Removed.");
+    window.setTimeout(() => setMsg(""), 2000);
+  });
 }
 
 function teardown() {
@@ -107,6 +213,7 @@ async function fetchOnce() {
   if (p) p.textContent = String(data.players_online ?? "—");
   if (s) s.textContent = String(data.servers_open ?? "—");
   if (v) v.textContent = String(data.total_visits ?? "—");
+  void updateDevSupporterListRow(el);
 }
 
 /** Call on boot and after login. Idempotent polling. */

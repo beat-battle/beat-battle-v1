@@ -78,5 +78,23 @@ def init_db() -> None:
         if row is None:
             db.add(models.SiteStats(id=1, total_visits=0))
             db.commit()
+        _seed_supporters_if_empty(db)
     finally:
         db.close()
+
+
+def _seed_supporters_if_empty(db: Session) -> None:
+    """One-time seed when the supporters table has no rows (Neon or SQLite)."""
+    from . import models
+
+    if db.query(models.Supporter).first() is not None:
+        return
+    initial = (
+        "globagorb",
+        "cowguts",
+        "kdzfake",
+        "originalmessgetter",
+    )
+    for k in initial:
+        db.add(models.Supporter(name_key=k))
+    db.commit()

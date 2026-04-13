@@ -9,8 +9,10 @@ import { playSfxBeatBattle } from "./sfx.js";
 import { mountModeSelectScreen } from "./screens/modeSelect.js";
 import { initCornerSocialTooltips } from "./cornerSocialTooltips.js";
 import { initDevStatsPanel, recordPageVisit } from "./devStatsPanel.js";
+import { initSupportersClient } from "./supporters.js";
 
 function boot() {
+  initSupportersClient();
   recordPageVisit();
   initCornerSocialTooltips();
   window.addEventListener("error", (ev) => {
