@@ -11,7 +11,12 @@ import {
 import { mountAuthCornerLeave } from "../authCorner.js";
 import { escapeHtml, rankBadgeHtml } from "../rankUi.js";
 import { supporterDisplayNameInnerHtml } from "../supporters.js";
-import { ingestMpChatMessage, mountMpChat, mpChatHandleErrorPayload } from "../mpChat.js";
+import {
+  clearMpChatSession,
+  ingestMpChatMessage,
+  mountMpChat,
+  mpChatHandleErrorPayload,
+} from "../mpChat.js";
 import { playSfxBeatBattle, playSfxMajor, playSfxMinor } from "../sfx.js";
 import { mountCookScreen } from "./cook.js";
 
@@ -219,6 +224,7 @@ export function mountLobbyScreen(root, ctx) {
     if (btn.id === "btn-leave") {
       playSfxMinor();
       intentionalLeave = true;
+      clearMpChatSession();
       try {
         ws.close();
       } catch {
@@ -234,6 +240,9 @@ export function mountLobbyScreen(root, ctx) {
 
   return () => {
     intentionalLeave = true;
+    if (!preserveWs) {
+      clearMpChatSession();
+    }
     unmountMpChat();
     root.removeEventListener("click", clickHandler);
     root.removeEventListener("change", changeHandler);

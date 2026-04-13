@@ -14,10 +14,10 @@ import {
 } from "../mpPresenceToast.js";
 import { playSfxMinor } from "../sfx.js";
 import {
-  audioBufferToWavBase64,
   fetchKitManifest,
+  KIT_SOUND_FILE_EXT,
   loadDrumKitBase64Parallel,
-  loadSynthAudioBuffersParallel,
+  loadSynthBuffersAndMp3Base64Parallel,
   SYNTH_KEYS,
 } from "../kitFromSeed.js";
 import { runSynthReveal } from "../synthReveal.js";
@@ -41,7 +41,7 @@ const SOUND_KEYS = [
 ];
 
 function base64ToAudioSrc(b64) {
-  return "data:audio/wav;base64," + b64;
+  return "data:audio/mpeg;base64," + b64;
 }
 
 function getJSZip() {
@@ -65,7 +65,7 @@ async function downloadKitZip(sounds) {
   for (const key of SOUND_KEYS) {
     const b64 = sounds[key];
     if (!b64) continue;
-    folder.file(`${key}.wav`, base64ToBytes(b64), { binary: true });
+    folder.file(`${key}.${KIT_SOUND_FILE_EXT}`, base64ToBytes(b64), { binary: true });
   }
   const blob = await zip.generateAsync({ type: "blob" });
   const url = URL.createObjectURL(blob);
@@ -81,11 +81,11 @@ async function downloadKitZip(sounds) {
 
 function downloadOneSound(key, b64) {
   if (!b64) return;
-  const blob = new Blob([base64ToBytes(b64)], { type: "audio/wav" });
+  const blob = new Blob([base64ToBytes(b64)], { type: "audio/mpeg" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${key}.wav`;
+  a.download = `${key}.${KIT_SOUND_FILE_EXT}`;
   a.rel = "noopener";
   document.body.appendChild(a);
   a.click();
@@ -147,7 +147,6 @@ async function buildKitClientSide(root, ctx, start) {
       seed,
       spice,
       apiBase,
-      audioContext: ac,
       manifest,
       onProgress: ({ step, total }) => {
         if (loadEl) loadEl.textContent = `Loading kit ${step} / ${total}…`;
@@ -156,23 +155,21 @@ async function buildKitClientSide(root, ctx, start) {
       drumsPending = false;
     });
 
-    const synthBuffers = await loadSynthAudioBuffersParallel({
-      seed,
-      spice,
-      apiBase,
-      audioContext: ac,
-      manifest,
-    });
+    const { buffers: synthBuffers, base64: synthB64 } =
+      await loadSynthBuffersAndMp3Base64Parallel({
+        seed,
+        spice,
+        apiBase,
+        audioContext: ac,
+        manifest,
+      });
 
     if (loadEl) loadEl.textContent = "";
 
     await runSynthReveal(ac, synthBuffers, () => drumsPending);
 
     const drumSounds = await drumPromise;
-    const sounds = { ...drumSounds };
-    for (const k of SYNTH_KEYS) {
-      sounds[k] = audioBufferToWavBase64(synthBuffers[k]);
-    }
+    const sounds = { ...drumSounds, ...synthB64 };
     await ac.close().catch(() => {});
     start(sounds);
   } catch (e) {
@@ -215,7 +212,7 @@ function setupCookUI(root, ctx, sounds) {
   };
 
   mountAuthCornerLeave(ctx);
-  const unmountMpChat = mountMpChat({ ws, playerId });
+  const unmountMpChat = mountMpChat({ ws, playerId, continueSession: true });
 
   root.innerHTML = `
     <div class="screen cook arcade-panel">

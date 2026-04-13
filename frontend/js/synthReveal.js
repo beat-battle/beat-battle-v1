@@ -10,7 +10,12 @@ const PREVIEW_END_GRACE_MS = 400;
 /** If drum fetch never settles, do not block the reveal forever. */
 const WAIT_FOR_DRUMS_MAX_MS = 120_000;
 
-function playSynthPreview(audioContext, buffer) {
+/**
+ * @param {AudioContext} audioContext
+ * @param {AudioBuffer | undefined} buffer
+ * @param {AbortSignal | undefined} signal
+ */
+function playSynthPreview(audioContext, buffer, signal) {
   return new Promise((resolve, reject) => {
     if (!buffer) {
       resolve();
@@ -31,6 +36,7 @@ function playSynthPreview(audioContext, buffer) {
       if (settled) return;
       settled = true;
       if (watchdog !== undefined) window.clearTimeout(watchdog);
+      if (signal) signal.removeEventListener("abort", onAbort);
       try {
         src.disconnect();
       } catch {
@@ -38,6 +44,21 @@ function playSynthPreview(audioContext, buffer) {
       }
       resolve();
     };
+    const onAbort = () => {
+      try {
+        src.stop(0);
+      } catch {
+        /* ignore */
+      }
+      finish();
+    };
+    if (signal) {
+      if (signal.aborted) {
+        resolve();
+        return;
+      }
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
     src.onended = finish;
     src.connect(audioContext.destination);
     const ms = Math.ceil(dur * 1000) + PREVIEW_END_GRACE_MS;
@@ -50,6 +71,7 @@ function playSynthPreview(audioContext, buffer) {
           src.start(0, 0, dur);
         } catch (e) {
           if (watchdog !== undefined) window.clearTimeout(watchdog);
+          if (signal) signal.removeEventListener("abort", onAbort);
           if (!settled) {
             settled = true;
             reject(e);
@@ -59,8 +81,27 @@ function playSynthPreview(audioContext, buffer) {
   });
 }
 
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * @param {number} ms
+ * @param {AbortSignal | undefined} signal
+ */
+function delayWithAbort(ms, signal) {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      if (signal) signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      window.clearTimeout(timer);
+      if (signal) signal.removeEventListener("abort", onAbort);
+      resolve();
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function waitForDrums(drumsStillLoading) {
@@ -120,8 +161,9 @@ export async function runSynthReveal(audioContext, synthBuffers, drumsStillLoadi
   const keys = SYNTH_KEYS;
 
   const tickHint = () => {
-    const extra = drumsStillLoading() ? "Loading drums…" : "";
-    if (sub) sub.textContent = extra;
+    const parts = ["Click to skip."];
+    if (drumsStillLoading()) parts.push("Loading drums…");
+    if (sub) sub.textContent = parts.join(" ");
   };
 
   try {
@@ -131,20 +173,33 @@ export async function runSynthReveal(audioContext, synthBuffers, drumsStillLoadi
       const key = keys[step];
       const buf = synthBuffers[key];
 
-      if (card) {
-        await new Promise((r) => requestAnimationFrame(r));
-        card.style.zIndex = String(10 + step);
-        card.classList.add("synth-card--in");
-        void card.offsetWidth;
-        card.classList.add("synth-card--placed");
-      }
+      const skipStep = new AbortController();
+      const onSkip = () => skipStep.abort();
+      layer.addEventListener("pointerdown", onSkip);
 
-      await playSynthPreview(audioContext, buf);
-      await delay(REVEAL_STAGGER_MS);
+      try {
+        if (card) {
+          await new Promise((r) => requestAnimationFrame(r));
+          card.style.zIndex = String(10 + step);
+          card.classList.add("synth-card--in");
+          void card.offsetWidth;
+          card.classList.add("synth-card--placed");
+        }
+
+        await playSynthPreview(audioContext, buf, skipStep.signal);
+        await delayWithAbort(REVEAL_STAGGER_MS, skipStep.signal);
+      } finally {
+        layer.removeEventListener("pointerdown", onSkip);
+      }
     }
 
     tickHint();
-    await waitForDrums(drumsStillLoading);
+    await Promise.race([
+      waitForDrums(drumsStillLoading),
+      new Promise((resolve) => {
+        layer.addEventListener("pointerdown", resolve, { once: true });
+      }),
+    ]);
   } finally {
     layer.remove();
   }

@@ -88,7 +88,9 @@ export function mountVoteSelectionScreen(root, ctx) {
   const targets = beats.filter((b) => b.player_id !== playerId);
 
   const unmountMpChat =
-    wsSock instanceof WebSocket ? mountMpChat({ ws: wsSock, playerId }) : () => {};
+    wsSock instanceof WebSocket
+      ? mountMpChat({ ws: wsSock, playerId, continueSession: true })
+      : () => {};
 
   const setVoteCardsLocked = (locked) => {
     voteUiLocked = locked;

@@ -63,6 +63,18 @@ function pushSessionLine(line) {
   });
 }
 
+/** Wipe log when starting a new multiplayer session (e.g. join/create from matchmaking). */
+export function clearMpChatSession() {
+  sessionLog.length = 0;
+  logSubscribers.forEach((fn) => {
+    try {
+      fn();
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
 /**
  * Call from each screen WebSocket handler after parsing JSON.
  * @param {any} m
@@ -118,11 +130,14 @@ function renderLogEl(logEl) {
 }
 
 /**
- * @param {{ ws: WebSocket, playerId: string }} opts
+ * @param {{ ws: WebSocket, playerId: string, continueSession?: boolean }} opts
  * @returns {() => void}
  */
-export function mountMpChat({ ws, playerId }) {
+export function mountMpChat({ ws, playerId, continueSession = false }) {
   void playerId;
+  if (!continueSession) {
+    clearMpChatSession();
+  }
   const wrap = document.createElement("div");
   wrap.className = "mp-chat";
   wrap.setAttribute("aria-label", "Match chat");

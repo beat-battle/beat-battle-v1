@@ -12,6 +12,7 @@ subtle moves keep one-shots usable in trap, while higher spice explores more cha
 from __future__ import annotations
 
 import random
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -31,7 +32,6 @@ from .audio_utils import (
     load_audio_file,
     list_category_wavs,
     load_random_sample,
-    load_wav_light_stereo,
     normalize_audio,
     quality_check,
     save_audio,
@@ -84,6 +84,24 @@ EXPECTED_KIT_WAVS = frozenset(
         "synth2.wav",
         "synth3.wav",
         "kick.wav",
+    }
+)
+
+# Light kit: copies dataset MP3s (web / solo API).
+EXPECTED_KIT_MP3 = frozenset(
+    {
+        "snare.mp3",
+        "clap.mp3",
+        "hihat.mp3",
+        "open_hat.mp3",
+        "808.mp3",
+        "perc.mp3",
+        "fx.mp3",
+        "vox.mp3",
+        "synth1.mp3",
+        "synth2.mp3",
+        "synth3.mp3",
+        "kick.mp3",
     }
 )
 
@@ -398,6 +416,9 @@ def _cleanup_stale_outputs(out_dir: Path) -> None:
     for p in out_dir.glob("*.wav"):
         if p.name not in EXPECTED_KIT_WAVS:
             p.unlink(missing_ok=True)
+    for p in out_dir.glob("*.mp3"):
+        if p.name not in EXPECTED_KIT_MP3:
+            p.unlink(missing_ok=True)
 
 
 def generate_kit(
@@ -521,8 +542,7 @@ def generate_light_stem(
     seed: int, slot_index: int, logical: str, out_dir: Path, spice: float = 0.3
 ) -> Path:
     """
-    Pick one deterministic ``.wav`` for the slot (portable RNG + ``spice``), resample to 44.1 kHz, save.
-    Stereo sources stay stereo; mono stays mono. No DSP chain.
+    Pick one deterministic dataset ``.mp3`` for the slot (portable RNG + ``spice``) and copy as-is.
     """
     s = float(np.clip(spice, 0.0, 1.0))
     out_dir = Path(out_dir)
@@ -534,15 +554,13 @@ def generate_light_stem(
             raise FileNotFoundError(f"Category folder not found: {synth_dir}")
         samples = list_dataset_samples_in_dir(synth_dir)
         path_pick = samples[pick_index(seed, slot_index, s, len(samples))]
-        y = load_wav_light_stereo(path_pick)
     else:
         d = _dataset_dir(logical)
         wavs = list_category_wavs(d)
         path_pick = wavs[pick_index(seed, slot_index, s, len(wavs))]
-        y = load_wav_light_stereo(path_pick)
 
-    dest = out_dir / f"{logical}.wav"
-    save_audio(y, dest, SAMPLE_RATE)
+    dest = out_dir / f"{logical}.mp3"
+    shutil.copy2(path_pick, dest)
     return dest.resolve()
 
 
@@ -552,7 +570,7 @@ def generate_kit_light(
     output_dir: Path | None = None,
 ) -> dict[str, Path]:
     """
-    Build a full kit by sampling the dataset only (no DSP chain).
+    Build a full kit by copying dataset ``.mp3`` samples only (no DSP chain).
     ``spice`` feeds :func:`pick_index` so kit selection varies with heat level.
     """
     s = float(np.clip(spice, 0.0, 1.0))

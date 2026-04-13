@@ -177,7 +177,7 @@ def _solo_generate_sync(seed: int, spice: float) -> dict[str, Any]:
 
 @app.post("/generate")
 async def post_generate(body: GenerateRequest) -> dict[str, Any]:
-    """Solo: synthesize a kit, return base64 WAV (44100 Hz)."""
+    """Solo: synthesize a kit, return base64 MP3 (dataset files as stored)."""
     seed = body.seed if body.seed is not None else random.randint(0, 2**31 - 1)
     return await asyncio.to_thread(_solo_generate_sync, seed, body.spice)
 
@@ -319,7 +319,7 @@ async def get_lobby_kit(
     request: Request,
     user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """Seed/spice for rebuilding the kit in the browser (no WAV payload)."""
+    """Seed/spice for rebuilding the kit in the browser (no audio payload)."""
     manager: LobbyManager = request.app.state.manager
     meta = manager.get_lobby_kit_meta_for_user(lobby_id, user.id)
     if meta is None:

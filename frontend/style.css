@@ -35,6 +35,34 @@ body {
   line-height: 1.45;
   background: var(--bg);
   overflow-x: hidden;
+  text-transform: uppercase;
+}
+
+/* Keep natural casing for names, codes, errors, and editable fields */
+input,
+textarea,
+select,
+.auth-corner-name,
+.lb-player,
+.results-winner-name,
+.results-rematch-name,
+.mp-chat-who,
+.server-code,
+.lobby-id,
+.lobby-name,
+.slide-player,
+.lobby-wave-toast-name,
+.app-error-toast-msg,
+.app-error-toast-meta,
+.mp-presence-toast-text,
+.rank-up-title,
+.rank-up-abbrev,
+.dev-stats-panel__card {
+  text-transform: none;
+}
+
+input.lobby-code-input {
+  text-transform: uppercase;
 }
 
 .page {
@@ -416,6 +444,7 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
 
 .mp-chat-text {
   color: var(--text-heading);
+  text-transform: uppercase;
 }
 
 .mp-chat-emoji {
@@ -1699,7 +1728,6 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   font-size: 0.72rem;
   color: var(--red-bright);
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   max-width: 100%;
   word-break: break-word;
 }
@@ -1963,6 +1991,9 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   background: rgba(0, 0, 0, 0.92);
   overflow-y: auto;
   box-sizing: border-box;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
 }
 
 /* Synth reveal (client-built kit) — playing-card ratio 2.5×3.5 (5:7), vertical shuffle only */

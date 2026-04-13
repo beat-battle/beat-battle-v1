@@ -1095,9 +1095,8 @@ class LobbyManager:
             await self._purge_lobby(lobby_id)
             return
 
-        if left_count < 2 and state_after == LobbyState.LOBBY:
-            await self._dissolve_lobby(lobby_id)
-            return
+        # Pre-game: allow a single player to stay in the lobby (wait for others).
+        # Mid-match: last player alone ends the match below.
 
         if (
             left_count == 1

@@ -24,6 +24,9 @@ export const SYNTH_KEYS = ["synth1", "synth2", "synth3"];
 
 export const DRUM_KEYS = KIT_SOUND_KEYS.filter((k) => !k.startsWith("synth"));
 
+/** Dataset / API kit stems are MP3; ZIP and single-file downloads use this extension. */
+export const KIT_SOUND_FILE_EXT = "mp3";
+
 function float32Bits(x) {
   const buf = new ArrayBuffer(4);
   new DataView(buf).setFloat32(0, Number(x), true);
@@ -85,6 +88,32 @@ function mediaUrl(apiBase, relPath) {
 }
 
 /**
+ * @param {ArrayBuffer} buffer
+ * @returns {string}
+ */
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunk = 0x8000;
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+  }
+  return btoa(bin);
+}
+
+/**
+ * @param {string} apiBase
+ * @param {string} relPath
+ * @returns {Promise<string>} base64 MP3 (dataset file bytes)
+ */
+async function fetchMediaMp3Base64(apiBase, relPath) {
+  const res = await fetch(mediaUrl(apiBase, relPath));
+  if (!res.ok) throw new Error(`fetch ${relPath}: ${res.status}`);
+  const arr = await res.arrayBuffer();
+  return arrayBufferToBase64(arr);
+}
+
+/**
  * @param {AudioBuffer} audioBuffer
  * @returns {Promise<AudioBuffer>}
  */
@@ -114,56 +143,46 @@ export async function fetchDecodeResample(audioContext, apiBase, relPath) {
   return resampleTo44100(decoded);
 }
 
-function writeStr(view, offset, s) {
-  for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
-}
-
 /**
- * @param {AudioBuffer} buffer
- * @returns {string} base64 PCM16 WAV
+ * @param {object} p
+ * @param {number} p.seed
+ * @param {number} p.spice
+ * @param {string} p.apiBase
+ * @param {AudioContext} p.audioContext
+ * @param {object} p.manifest
+ * @returns {Promise<{ buffers: Record<string, AudioBuffer>; base64: Record<string, string> }>}
  */
-export function audioBufferToWavBase64(buffer) {
-  const numChannels = buffer.numberOfChannels;
-  const sampleRate = buffer.sampleRate;
-  const length = buffer.length;
-  const blockAlign = numChannels * 2;
-  const byteRate = sampleRate * blockAlign;
-  const dataSize = length * blockAlign;
-  const arrayBuffer = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(arrayBuffer);
-  writeStr(view, 0, "RIFF");
-  view.setUint32(4, 36 + dataSize, true);
-  writeStr(view, 8, "WAVE");
-  writeStr(view, 12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, numChannels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, byteRate, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, 16, true);
-  writeStr(view, 36, "data");
-  view.setUint32(40, dataSize, true);
-  let o = 44;
-  for (let i = 0; i < length; i++) {
-    for (let c = 0; c < numChannels; c++) {
-      let s = buffer.getChannelData(c)[i];
-      s = Math.max(-1, Math.min(1, s));
-      const v = Math.max(-32768, Math.min(32767, Math.round(s * 32767)));
-      view.setInt16(o, v, true);
-      o += 2;
-    }
-  }
-  const bytes = new Uint8Array(arrayBuffer);
-  let bin = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
-  }
-  return btoa(bin);
+export async function loadSynthBuffersAndMp3Base64Parallel({
+  seed,
+  spice,
+  apiBase,
+  audioContext,
+  manifest,
+}) {
+  const keysObj = manifest.keys;
+  const buffers = /** @type {Record<string, AudioBuffer>} */ ({});
+  const base64 = /** @type {Record<string, string>} */ ({});
+  await Promise.all(
+    SYNTH_KEYS.map(async (key) => {
+      const slot = KIT_SOUND_KEYS.indexOf(key);
+      const paths = keysObj[key];
+      if (!paths?.length) throw new Error(`No samples for ${key}`);
+      const idx = pickIndex(seed, slot, spice, paths.length);
+      const relPath = paths[idx];
+      const res = await fetch(mediaUrl(apiBase, relPath));
+      if (!res.ok) throw new Error(`fetch ${relPath}: ${res.status}`);
+      const arr = await res.arrayBuffer();
+      base64[key] = arrayBufferToBase64(arr);
+      const decoded = await audioContext.decodeAudioData(arr.slice(0));
+      buffers[key] = await resampleTo44100(decoded);
+    }),
+  );
+  return { buffers, base64 };
 }
 
 /**
+ * Synth stems as decoded buffers only (same fetches as {@link loadSynthBuffersAndMp3Base64Parallel}).
+ * Kept for callers that still import this name.
  * @param {object} p
  * @param {number} p.seed
  * @param {number} p.spice
@@ -172,19 +191,9 @@ export function audioBufferToWavBase64(buffer) {
  * @param {object} p.manifest
  * @returns {Promise<Record<string, AudioBuffer>>}
  */
-export async function loadSynthAudioBuffersParallel({ seed, spice, apiBase, audioContext, manifest }) {
-  const keysObj = manifest.keys;
-  const out = /** @type {Record<string, AudioBuffer>} */ ({});
-  await Promise.all(
-    SYNTH_KEYS.map(async (key) => {
-      const slot = KIT_SOUND_KEYS.indexOf(key);
-      const paths = keysObj[key];
-      if (!paths?.length) throw new Error(`No samples for ${key}`);
-      const idx = pickIndex(seed, slot, spice, paths.length);
-      out[key] = await fetchDecodeResample(audioContext, apiBase, paths[idx]);
-    }),
-  );
-  return out;
+export async function loadSynthAudioBuffersParallel(args) {
+  const { buffers } = await loadSynthBuffersAndMp3Base64Parallel(args);
+  return buffers;
 }
 
 /**
@@ -192,7 +201,6 @@ export async function loadSynthAudioBuffersParallel({ seed, spice, apiBase, audi
  * @param {number} p.seed
  * @param {number} p.spice
  * @param {string} p.apiBase
- * @param {AudioContext} p.audioContext
  * @param {object} p.manifest
  * @param {(ev: { key: string; step: number; total: number }) => void} [p.onProgress]
  * @returns {Promise<Record<string, string>>}
@@ -201,7 +209,6 @@ export async function loadDrumKitBase64Parallel({
   seed,
   spice,
   apiBase,
-  audioContext,
   manifest,
   onProgress,
 }) {
@@ -214,8 +221,7 @@ export async function loadDrumKitBase64Parallel({
       const paths = keysObj[key];
       if (!paths?.length) throw new Error(`No samples for ${key}`);
       const idx = pickIndex(seed, slot, spice, paths.length);
-      const buf = await fetchDecodeResample(audioContext, apiBase, paths[idx]);
-      const b64 = audioBufferToWavBase64(buf);
+      const b64 = await fetchMediaMp3Base64(apiBase, paths[idx]);
       done += 1;
       onProgress?.({ key, step: done, total });
       return [key, b64];
@@ -225,15 +231,14 @@ export async function loadDrumKitBase64Parallel({
 }
 
 /**
- * Full kit as base64 WAV map (sequential; use phased helpers for UX).
+ * Full kit as base64 MP3 map (sequential; use phased helpers for UX).
  * @param {object} p
  * @param {number} p.seed
  * @param {number} p.spice
  * @param {string} p.apiBase
- * @param {AudioContext} p.audioContext
  * @param {(ev: { key: string; step: number; total: number }) => void} [p.onProgress]
  */
-export async function buildKitFromSeed({ seed, spice, apiBase, audioContext, onProgress }) {
+export async function buildKitFromSeed({ seed, spice, apiBase, onProgress }) {
   const manifest = await fetchKitManifest(apiBase);
   const keysObj = manifest.keys;
   const out = /** @type {Record<string, string>} */ ({});
@@ -243,8 +248,7 @@ export async function buildKitFromSeed({ seed, spice, apiBase, audioContext, onP
     const paths = keysObj[key];
     if (!paths?.length) throw new Error(`No samples for ${key}`);
     const idx = pickIndex(seed, i, spice, paths.length);
-    const buf = await fetchDecodeResample(audioContext, apiBase, paths[idx]);
-    out[key] = audioBufferToWavBase64(buf);
+    out[key] = await fetchMediaMp3Base64(apiBase, paths[idx]);
     onProgress?.({ key, step: i + 1, total: n });
   }
   return out;

@@ -1,6 +1,7 @@
 /**
  * Multiplayer player join/leave — top-center toasts, slide from top.
  */
+import { clearMpChatSession } from "./mpChat.js";
 import { playSfxPlayerJoin, playSfxPlayerLeave, playSfxSoloMatchAlarm } from "./sfx.js";
 import { supporterPlainPrefix } from "./supporters.js";
 
@@ -91,6 +92,7 @@ export function navigateToMenuAfterLobbyDissolved(ctx, ws, m) {
   if (m && m.reason === "only_player_left") {
     playSfxSoloMatchAlarm();
   }
+  clearMpChatSession();
   try {
     ws.close();
   } catch {

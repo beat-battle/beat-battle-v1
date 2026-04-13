@@ -6,7 +6,12 @@ import { getApiBase } from "../apiOrigin.js";
 import { mountAuthCornerLeave } from "../authCorner.js";
 import { RANK_BASELINE_KEY, RANK_PENDING_KEY } from "../rankUi.js";
 import { showServerRestartingWait } from "../serverRestartOverlay.js";
-import { ingestMpChatMessage, mountMpChat, mpChatHandleErrorPayload } from "../mpChat.js";
+import {
+  clearMpChatSession,
+  ingestMpChatMessage,
+  mountMpChat,
+  mpChatHandleErrorPayload,
+} from "../mpChat.js";
 import { notifyRematchWant } from "../mpPresenceToast.js";
 import { playSfxMinor } from "../sfx.js";
 import { supporterDisplayNameInnerHtml } from "../supporters.js";
@@ -273,7 +278,9 @@ export function mountResultsScreen(root, ctx) {
   }
 
   const unmountMpChat =
-    wsSock instanceof WebSocket ? mountMpChat({ ws: wsSock, playerId }) : () => {};
+    wsSock instanceof WebSocket
+      ? mountMpChat({ ws: wsSock, playerId, continueSession: true })
+      : () => {};
 
   if (wsSock instanceof WebSocket) {
     wsSock.onmessage = (ev) => {
@@ -325,6 +332,7 @@ export function mountResultsScreen(root, ctx) {
   root.querySelector("#results-home")?.addEventListener("click", async () => {
     playSfxMinor();
     teardownClose = true;
+    clearMpChatSession();
     try {
       wsSock?.close();
     } catch {

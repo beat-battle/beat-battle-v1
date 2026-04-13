@@ -136,7 +136,9 @@ export function mountVotingSlideshowScreen(root, ctx) {
   let currentBeatOwnerId = null;
 
   const unmountMpChat =
-    wsSock instanceof WebSocket ? mountMpChat({ ws: wsSock, playerId }) : () => {};
+    wsSock instanceof WebSocket
+      ? mountMpChat({ ws: wsSock, playerId, continueSession: true })
+      : () => {};
 
   root.innerHTML = `
     <div class="screen slideshow arcade-panel">

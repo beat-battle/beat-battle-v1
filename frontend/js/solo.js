@@ -4,10 +4,10 @@
 import { mountAuthCornerLeave } from "./authCorner.js";
 import { getApiBase } from "./apiOrigin.js";
 import {
-  audioBufferToWavBase64,
   fetchKitManifest,
+  KIT_SOUND_FILE_EXT,
   loadDrumKitBase64Parallel,
-  loadSynthAudioBuffersParallel,
+  loadSynthBuffersAndMp3Base64Parallel,
   SYNTH_KEYS,
 } from "./kitFromSeed.js";
 import { mountKitLayoutShell } from "./kitGridLayout.js";
@@ -30,7 +30,7 @@ const SOUND_KEYS = [
 ];
 
 function base64ToAudioSrc(base64) {
-  return "data:audio/wav;base64," + base64;
+  return "data:audio/mpeg;base64," + base64;
 }
 
 function labelForKey(key) {
@@ -285,7 +285,7 @@ export function mountSoloScreen(root, ctx) {
     for (const key of SOUND_KEYS) {
       const b64 = lastSoundsB64[key];
       if (!b64) continue;
-      folder.file(`${key}.wav`, base64ToBytes(b64), { binary: true });
+      folder.file(`${key}.${KIT_SOUND_FILE_EXT}`, base64ToBytes(b64), { binary: true });
     }
     const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);
@@ -303,11 +303,11 @@ export function mountSoloScreen(root, ctx) {
     if (!lastSoundsB64) return;
     const b64 = lastSoundsB64[key];
     if (!b64) return;
-    const blob = new Blob([base64ToBytes(b64)], { type: "audio/wav" });
+    const blob = new Blob([base64ToBytes(b64)], { type: "audio/mpeg" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${key}.wav`;
+    a.download = `${key}.${KIT_SOUND_FILE_EXT}`;
     a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
@@ -356,7 +356,6 @@ export function mountSoloScreen(root, ctx) {
         seed,
         spice: spiceNum,
         apiBase: base,
-        audioContext: ac,
         manifest,
         onProgress: ({ step, total }) => {
           if (loadEl) loadEl.textContent = `Loading kit ${step} / ${total}…`;
@@ -365,13 +364,14 @@ export function mountSoloScreen(root, ctx) {
         drumsPending = false;
       });
 
-      const synthBuffers = await loadSynthAudioBuffersParallel({
-        seed,
-        spice: spiceNum,
-        apiBase: base,
-        audioContext: ac,
-        manifest,
-      });
+      const { buffers: synthBuffers, base64: synthB64 } =
+        await loadSynthBuffersAndMp3Base64Parallel({
+          seed,
+          spice: spiceNum,
+          apiBase: base,
+          audioContext: ac,
+          manifest,
+        });
 
       if (loadEl) loadEl.textContent = "";
       loadLayer.remove();
@@ -380,10 +380,7 @@ export function mountSoloScreen(root, ctx) {
       await runSynthReveal(ac, synthBuffers, () => drumsPending);
 
       const drumSounds = await drumPromise;
-      const sounds = { ...drumSounds };
-      for (const k of SYNTH_KEYS) {
-        sounds[k] = audioBufferToWavBase64(synthBuffers[k]);
-      }
+      const sounds = { ...drumSounds, ...synthB64 };
 
       await ac.close().catch(() => {});
       activeKitAc = null;
