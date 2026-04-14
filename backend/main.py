@@ -327,6 +327,23 @@ async def get_lobby_kit(
     return meta
 
 
+@app.get(
+    "/api/lobby/{lobby_id}/match_sync",
+    response_class=ORJSONResponse,
+)
+async def get_match_sync(
+    lobby_id: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Current match phase for HTTP recovery when WebSocket messages are missed."""
+    manager: LobbyManager = request.app.state.manager
+    sync = manager.get_match_sync_for_user(lobby_id, user.id)
+    if sync is None:
+        raise HTTPException(status_code=404, detail="Match not available.")
+    return sync
+
+
 def _sniff_audio(buf: bytes) -> str | None:
     if len(buf) >= 12 and buf[:4] == b"RIFF" and buf[8:12] == b"WAVE":
         return ".wav"

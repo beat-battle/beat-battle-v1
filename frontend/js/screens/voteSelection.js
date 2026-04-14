@@ -13,6 +13,7 @@ import {
 import { mountAuthCornerLeave } from "../authCorner.js";
 import { supporterDisplayNameInnerHtml } from "../supporters.js";
 import { ingestMpChatMessage, mountMpChat, mpChatHandleErrorPayload } from "../mpChat.js";
+import { pollMatchSync } from "../mpMatchSync.js";
 import { playSfxMajor } from "../sfx.js";
 import { mountResultsScreen } from "./results.js";
 
@@ -52,10 +53,12 @@ export function mountVoteSelectionScreen(root, ctx) {
 
   const wsSock = ctx.mpWs;
   const playerId = ctx.playerId ? String(ctx.playerId) : "";
+  const lobbyId = ctx.lobbyId;
   const beats = ctx.beats || [];
   const unlock = ctx.votesUnlockAt ?? 0;
   const apiBase = typeof ctx.apiBase === "string" ? ctx.apiBase : getApiBase();
   let preserveWs = false;
+  let resultsPollNav = false;
   /** True while unmount closes the socket on purpose (avoid restart overlay). */
   let teardownClose = false;
   let unlockInterval = 0;
@@ -91,6 +94,25 @@ export function mountVoteSelectionScreen(root, ctx) {
     wsSock instanceof WebSocket
       ? mountMpChat({ ws: wsSock, playerId, continueSession: true })
       : () => {};
+
+  const stopResultsPoll = pollMatchSync(
+    String(lobbyId),
+    (sync) => {
+      if (resultsPollNav || preserveWs) return;
+      if (String(sync.match_state) !== "results" || !sync.results || typeof sync.results !== "object") {
+        return;
+      }
+      resultsPollNav = true;
+      preserveWs = true;
+      stopResultsPoll();
+      ctx.navigate(mountResultsScreen, {
+        mpWs: wsSock,
+        results: sync.results,
+        playerId,
+      });
+    },
+    4500,
+  );
 
   const setVoteCardsLocked = (locked) => {
     voteUiLocked = locked;
@@ -277,6 +299,7 @@ export function mountVoteSelectionScreen(root, ctx) {
     }
     if (m.type === "results") {
       preserveWs = true;
+      stopResultsPoll();
       ctx.navigate(mountResultsScreen, { mpWs: wsSock, results: m, playerId });
     }
   };
@@ -287,6 +310,7 @@ export function mountVoteSelectionScreen(root, ctx) {
   wsSock.onmessage = onMessage;
 
   return () => {
+    stopResultsPoll();
     unmountMpChat();
     if (unlockInterval) clearInterval(unlockInterval);
     teardownBeatWaveforms();

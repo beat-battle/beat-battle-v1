@@ -12,7 +12,9 @@ import {
 } from "../mpPresenceToast.js";
 import { ingestMpChatMessage, mountMpChat, mpChatHandleErrorPayload } from "../mpChat.js";
 import { supporterDisplayNameInnerHtml } from "../supporters.js";
+import { pollMatchSync } from "../mpMatchSync.js";
 import { playSfxMinor } from "../sfx.js";
+import { mountResultsScreen } from "./results.js";
 import { mountVoteSelectionScreen } from "./voteSelection.js";
 
 /** @type {Record<string, string>} */
@@ -123,9 +125,11 @@ export function mountVotingSlideshowScreen(root, ctx) {
 
   const wsSock = ctx.mpWs;
   const playerId = ctx.playerId;
+  const lobbyId = ctx.lobbyId;
   const beats = ctx.beats || [];
   const votesUnlockAt = ctx.votesUnlockAt;
   let preserveWs = false;
+  let resultsPollNav = false;
   /** True while unmount closes the socket on purpose (avoid restart overlay). */
   let teardownClose = false;
   let activeWsur = null;
@@ -139,6 +143,25 @@ export function mountVotingSlideshowScreen(root, ctx) {
     wsSock instanceof WebSocket
       ? mountMpChat({ ws: wsSock, playerId, continueSession: true })
       : () => {};
+
+  const stopResultsPoll = pollMatchSync(
+    String(lobbyId),
+    (sync) => {
+      if (resultsPollNav || preserveWs) return;
+      if (String(sync.match_state) !== "results" || !sync.results || typeof sync.results !== "object") {
+        return;
+      }
+      resultsPollNav = true;
+      preserveWs = true;
+      stopResultsPoll();
+      ctx.navigate(mountResultsScreen, {
+        mpWs: wsSock,
+        results: sync.results,
+        playerId,
+      });
+    },
+    4500,
+  );
 
   root.innerHTML = `
     <div class="screen slideshow arcade-panel">
@@ -451,12 +474,11 @@ export function mountVotingSlideshowScreen(root, ctx) {
     }
     if (m.type === "results") {
       preserveWs = true;
-      import("./results.js").then((mod) => {
-        ctx.navigate(mod.mountResultsScreen, {
-          mpWs: wsSock,
-          results: m,
-          playerId,
-        });
+      stopResultsPoll();
+      ctx.navigate(mountResultsScreen, {
+        mpWs: wsSock,
+        results: m,
+        playerId,
       });
     }
   };
@@ -473,6 +495,7 @@ export function mountVotingSlideshowScreen(root, ctx) {
   }
 
   return () => {
+    stopResultsPoll();
     unmountMpChat();
     if (beatReactionCooldownTimer != null) clearTimeout(beatReactionCooldownTimer);
     clearBeatToastTimers();

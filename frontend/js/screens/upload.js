@@ -11,6 +11,7 @@ import {
   notifyMpPlayerLeave,
 } from "../mpPresenceToast.js";
 import { ingestMpChatMessage, mountMpChat, mpChatHandleErrorPayload } from "../mpChat.js";
+import { pollMatchSync } from "../mpMatchSync.js";
 import { playSfxMajor, playSfxUploadAlarm } from "../sfx.js";
 import { mountVotingSlideshowScreen } from "./votingSlideshow.js";
 
@@ -24,6 +25,7 @@ export function mountUploadScreen(root, ctx) {
       ? rawDeadline
       : Date.now() / 1000 + 120;
   let preserveWs = false;
+  let httpNavigated = false;
   /** True while unmount closes the socket on purpose (avoid restart overlay). */
   let teardownClose = false;
   let closedNotified = false;
@@ -75,6 +77,25 @@ export function mountUploadScreen(root, ctx) {
 
   tick();
   tickId = window.setInterval(tick, 250);
+
+  const stopPhasePoll = pollMatchSync(
+    String(lobbyId),
+    (sync) => {
+      if (httpNavigated || preserveWs) return;
+      if (String(sync.match_state) !== "voting") return;
+      httpNavigated = true;
+      preserveWs = true;
+      stopPhasePoll();
+      ctx.navigate(mountVotingSlideshowScreen, {
+        mpWs: ws,
+        playerId,
+        lobbyId: ctx.lobbyId,
+        beats: Array.isArray(sync.beats) ? sync.beats : [],
+        votesUnlockAt: sync.votes_unlock_at,
+      });
+    },
+    4500,
+  );
 
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -141,6 +162,7 @@ export function mountUploadScreen(root, ctx) {
   ws.onmessage = onMessage;
 
   return () => {
+    stopPhasePoll();
     unmountMpChat();
     if (tickId != null) {
       clearInterval(tickId);

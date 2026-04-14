@@ -79,6 +79,9 @@ class Lobby:
     results_at: float | None = None
     cook_duration_min: int = DEFAULT_COOK_DURATION_MIN
     cook_finished: set[str] = field(default_factory=set)
+    # Wall-clock unix seconds; set during COOKING / UPLOAD for HTTP + WS recovery.
+    cook_deadline_ts: float | None = None
+    upload_deadline_ts: float | None = None
     # player_id -> unix time of last mp_chat send (text or emoji)
     chat_last_sent: dict[str, float] = field(default_factory=dict)
     # RESULTS only: player_ids who voted to rematch

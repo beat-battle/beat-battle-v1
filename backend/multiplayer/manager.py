@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import random
 import secrets
 import shutil
@@ -170,7 +171,131 @@ class LobbyManager:
             LobbyState.RESULTS,
         ):
             return None
-        return {"seed": lobby.seed, "spice": lobby.spice}
+        now = time.time()
+        out: dict[str, Any] = {
+            "seed": lobby.seed,
+            "spice": lobby.spice,
+            "match_state": lobby.state.value,
+        }
+        if lobby.state == LobbyState.COOKING and lobby.cook_deadline_ts is not None:
+            out["cook_remaining_s"] = max(
+                0, int(math.ceil(lobby.cook_deadline_ts - now))
+            )
+        if lobby.state == LobbyState.UPLOAD and lobby.upload_deadline_ts is not None:
+            out["upload_deadline_ts"] = lobby.upload_deadline_ts
+        if lobby.state == LobbyState.VOTING:
+            beats: list[dict[str, Any]] = []
+            for owner_id in sorted(lobby.uploaded, key=lambda x: x):
+                p = lobby.players.get(owner_id)
+                nm = p.name if p else owner_id
+                beats.append(
+                    {
+                        "player_id": owner_id,
+                        "name": nm,
+                        "url": f"/beats/{lobby_id}/{owner_id}",
+                    }
+                )
+            out["beats"] = beats
+            out["votes_unlock_at"] = lobby.votes_unlock_at
+        if lobby.state == LobbyState.RESULTS:
+            payload, _ = self._results_ws_payload_and_winner_user_ids(lobby, lobby_id)
+            out["results"] = payload
+        return out
+
+    @staticmethod
+    def _results_ws_payload_and_winner_user_ids(
+        lobby: Lobby, lobby_id: str
+    ) -> tuple[dict[str, Any], list[int]]:
+        """Build ``type: results`` message and DB winner user ids (``lobby.state`` is ``RESULTS``)."""
+        counts: dict[str, int] = {}
+        for target in lobby.votes.values():
+            counts[target] = counts.get(target, 0) + 1
+        if not counts and lobby.uploaded:
+            sole = next(iter(lobby.uploaded))
+            winners = [sole]
+        elif not counts:
+            winners = []
+        else:
+            mx = max(counts.values())
+            winners = [pid for pid, c in counts.items() if c == mx]
+
+        n_players = len(lobby.players)
+        no_winner_two_players = n_players == 2
+        if no_winner_two_players:
+            winners = []
+
+        def name_for(pid: str) -> str:
+            pl = lobby.players.get(pid)
+            return pl.name if pl else pid
+
+        board = sorted(counts.items(), key=lambda x: (-x[1], name_for(x[0])))
+        leaderboard = [{"player_id": pid, "name": name_for(pid), "votes": v} for pid, v in board]
+        winner_names = [name_for(w) for w in winners]
+        winner_user_ids = [lobby.players[w].user_id for w in winners if w in lobby.players]
+
+        beats_out: list[dict[str, Any]] = []
+        for owner_id in sorted(lobby.uploaded, key=lambda x: x):
+            pl = lobby.players.get(owner_id)
+            nm = pl.name if pl else owner_id
+            beats_out.append(
+                {
+                    "player_id": owner_id,
+                    "name": nm,
+                    "url": f"/beats/{lobby_id}/{owner_id}",
+                }
+            )
+
+        participants = [
+            {"player_id": pid, "name": lobby.players[pid].name} for pid in lobby.players
+        ]
+
+        payload: dict[str, Any] = {
+            "type": "results",
+            "lobby_id": lobby_id,
+            "winners": winner_names,
+            "winner_ids": winners,
+            "leaderboard": leaderboard,
+            "beats": beats_out,
+            "no_winner_two_players": no_winner_two_players,
+            "participants": participants,
+        }
+        return payload, winner_user_ids
+
+    def get_match_sync_for_user(self, lobby_id: str, user_id: int) -> dict[str, Any] | None:
+        """HTTP recovery: current match phase + payloads matching WebSocket transitions."""
+        lobby = self.lobbies.get(lobby_id)
+        if not lobby:
+            return None
+        if self.player_id_for_user_in_lobby(lobby_id, user_id) is None:
+            return None
+        now = time.time()
+        st = lobby.state
+        out: dict[str, Any] = {
+            "match_state": st.value,
+            "lobby_id": lobby_id,
+        }
+        if st == LobbyState.COOKING and lobby.cook_deadline_ts is not None:
+            out["cook_remaining_s"] = max(0, int(math.ceil(lobby.cook_deadline_ts - now)))
+        if st == LobbyState.UPLOAD and lobby.upload_deadline_ts is not None:
+            out["upload_deadline_ts"] = lobby.upload_deadline_ts
+        if st == LobbyState.VOTING:
+            beats: list[dict[str, Any]] = []
+            for owner_id in sorted(lobby.uploaded, key=lambda x: x):
+                p = lobby.players.get(owner_id)
+                nm = p.name if p else owner_id
+                beats.append(
+                    {
+                        "player_id": owner_id,
+                        "name": nm,
+                        "url": f"/beats/{lobby_id}/{owner_id}",
+                    }
+                )
+            out["beats"] = beats
+            out["votes_unlock_at"] = lobby.votes_unlock_at
+        if st == LobbyState.RESULTS:
+            payload, _ = self._results_ws_payload_and_winner_user_ids(lobby, lobby_id)
+            out["results"] = payload
+        return out
 
     def attach_ws(self, player_id: str, ws: WebSocket) -> None:
         self.player_ws[player_id] = ws
@@ -531,6 +656,8 @@ class LobbyManager:
             duration_s = max(
                 60, min(max(COOK_DURATION_MIN_OPTIONS) * 60, int(lobby.cook_duration_min) * 60)
             )
+            lobby.cook_deadline_ts = time.time() + duration_s
+            lobby.upload_deadline_ts = None
 
         early_all_done = False
         try:
@@ -557,7 +684,10 @@ class LobbyManager:
         except asyncio.CancelledError:
             return
         finally:
-            self._cook_tasks.pop(lobby_id, None)
+            me = asyncio.current_task()
+            t = self._cook_tasks.get(lobby_id)
+            if t is me:
+                self._cook_tasks.pop(lobby_id, None)
 
         if early_all_done:
             await self.broadcast(
@@ -569,13 +699,15 @@ class LobbyManager:
                 },
             )
 
+        upload_deadline_ts = time.time() + UPLOAD_PHASE_S
         async with self._lock:
             lobby = self.lobbies.get(lobby_id)
             if not lobby or lobby.state != LobbyState.COOKING:
                 return
             lobby.state = LobbyState.UPLOAD
+            lobby.cook_deadline_ts = None
+            lobby.upload_deadline_ts = upload_deadline_ts
 
-        upload_deadline_ts = time.time() + UPLOAD_PHASE_S
         await self.broadcast(
             lobby_id,
             {
@@ -606,7 +738,10 @@ class LobbyManager:
         except asyncio.CancelledError:
             return
         finally:
-            self._upload_tasks.pop(lobby_id, None)
+            me = asyncio.current_task()
+            t = self._upload_tasks.get(lobby_id)
+            if t is me:
+                self._upload_tasks.pop(lobby_id, None)
 
     async def record_upload(self, lobby_id: str, player_id: str) -> None:
         async with self._lock:
@@ -698,9 +833,15 @@ class LobbyManager:
         except asyncio.CancelledError:
             return
         finally:
-            self._vote_tasks.pop(lobby_id, None)
+            me = asyncio.current_task()
+            t = self._vote_tasks.get(lobby_id)
+            if t is me:
+                self._vote_tasks.pop(lobby_id, None)
 
     async def _finalize_results(self, lobby_id: str) -> None:
+        winner_user_ids: list[int] = []
+        payload: dict[str, Any] | None = None
+        winners: list[str] = []
         async with self._lock:
             lobby = self.lobbies.get(lobby_id)
             if not lobby or lobby.state != LobbyState.VOTING:
@@ -708,63 +849,13 @@ class LobbyManager:
             lobby.state = LobbyState.RESULTS
             lobby.results_at = time.time()
             lobby.rematch_pending.clear()
-            counts: dict[str, int] = {}
-            for target in lobby.votes.values():
-                counts[target] = counts.get(target, 0) + 1
-            if not counts and lobby.uploaded:
-                sole = next(iter(lobby.uploaded))
-                winners = [sole]
-            elif not counts:
-                winners = []
-            else:
-                mx = max(counts.values())
-                winners = [pid for pid, c in counts.items() if c == mx]
+            payload, winner_user_ids = self._results_ws_payload_and_winner_user_ids(lobby, lobby_id)
+            winners = list(payload.get("winner_ids") or [])
 
-            n_players = len(lobby.players)
-            no_winner_two_players = n_players == 2
-            if no_winner_two_players:
-                winners = []
+        if payload is None:
+            return
 
-            def name_for(pid: str) -> str:
-                pl = lobby.players.get(pid)
-                return pl.name if pl else pid
-
-            board = sorted(counts.items(), key=lambda x: (-x[1], name_for(x[0])))
-            leaderboard = [{"player_id": pid, "name": name_for(pid), "votes": v} for pid, v in board]
-            winner_names = [name_for(w) for w in winners]
-            winner_user_ids = [
-                lobby.players[w].user_id for w in winners if w in lobby.players
-            ]
-
-            beats_out: list[dict[str, Any]] = []
-            for owner_id in sorted(lobby.uploaded, key=lambda x: x):
-                pl = lobby.players.get(owner_id)
-                nm = pl.name if pl else owner_id
-                beats_out.append(
-                    {
-                        "player_id": owner_id,
-                        "name": nm,
-                        "url": f"/beats/{lobby_id}/{owner_id}",
-                    }
-                )
-
-            participants = [
-                {"player_id": pid, "name": lobby.players[pid].name} for pid in lobby.players
-            ]
-
-        await self.broadcast(
-            lobby_id,
-            {
-                "type": "results",
-                "lobby_id": lobby_id,
-                "winners": winner_names,
-                "winner_ids": winners,
-                "leaderboard": leaderboard,
-                "beats": beats_out,
-                "no_winner_two_players": no_winner_two_players,
-                "participants": participants,
-            },
-        )
+        await self.broadcast(lobby_id, payload)
 
         if winner_user_ids:
 

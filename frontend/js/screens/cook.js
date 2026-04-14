@@ -22,8 +22,11 @@ import {
 } from "../kitFromSeed.js";
 import { runSynthReveal } from "../synthReveal.js";
 import { mountKitLayoutShell } from "../kitGridLayout.js";
+import { pollMatchSync } from "../mpMatchSync.js";
 import { ingestMpChatMessage, mountMpChat, mpChatHandleErrorPayload } from "../mpChat.js";
 import { mountUploadScreen } from "./upload.js";
+import { mountVotingSlideshowScreen } from "./votingSlideshow.js";
+import { mountResultsScreen } from "./results.js";
 
 const SOUND_KEYS = [
   "snare",
@@ -110,12 +113,11 @@ function kitNeedsFetch(sounds) {
   return !SOUND_KEYS.every((k) => Boolean(sounds[k]));
 }
 
-async function resolveSeedSpice(ctx) {
-  let seed = ctx.seed;
-  let spice = ctx.spice;
-  if (seed != null && spice != null && Number.isFinite(Number(seed)) && Number.isFinite(Number(spice))) {
-    return { seed: Number(seed), spice: Number(spice) };
-  }
+/**
+ * Full kit row from GET /api/lobby/:id/kit (seed/spice + match phase for recovery).
+ * @param {object} ctx
+ */
+async function fetchLobbyKitMeta(ctx) {
   const res = await fetch(
     `${getApiBase()}/api/lobby/${encodeURIComponent(String(ctx.lobbyId))}/kit`,
     { headers: authHeaders() },
@@ -126,11 +128,73 @@ async function resolveSeedSpice(ctx) {
   }
   const data = await res.json();
   if (data.seed == null || data.spice == null) throw new Error("Invalid kit metadata.");
-  return { seed: Number(data.seed), spice: Number(data.spice) };
+  const ur = data.upload_deadline_ts;
+  const vu = data.votes_unlock_at;
+  return {
+    seed: Number(data.seed),
+    spice: Number(data.spice),
+    matchState: data.match_state != null ? String(data.match_state) : null,
+    cookRemainingS:
+      data.cook_remaining_s != null && Number.isFinite(Number(data.cook_remaining_s))
+        ? Math.max(0, Number(data.cook_remaining_s))
+        : null,
+    uploadDeadlineTs: ur != null && Number.isFinite(Number(ur)) ? Number(ur) : null,
+    beats: Array.isArray(data.beats) ? data.beats : null,
+    votesUnlockAt: vu != null && Number.isFinite(Number(vu)) ? Number(vu) : undefined,
+    results: data.results && typeof data.results === "object" ? data.results : null,
+  };
 }
 
-async function buildKitClientSide(root, ctx, start) {
-  const { seed, spice } = await resolveSeedSpice(ctx);
+/**
+ * If the match already left the cook phase, navigate and return true.
+ * @param {object} ctx
+ * @param {WebSocket} ws
+ * @param {Awaited<ReturnType<typeof fetchLobbyKitMeta>>} meta
+ */
+function tryNavigatePastCookPhase(ctx, ws, meta) {
+  const st = meta.matchState;
+  if (st === "upload" && meta.uploadDeadlineTs != null) {
+    ctx.navigate(mountUploadScreen, {
+      mpWs: ws,
+      playerId: ctx.playerId,
+      lobbyId: ctx.lobbyId,
+      uploadDeadlineTs: meta.uploadDeadlineTs,
+    });
+    return true;
+  }
+  if (st === "voting") {
+    ctx.navigate(mountVotingSlideshowScreen, {
+      mpWs: ws,
+      playerId: ctx.playerId,
+      lobbyId: ctx.lobbyId,
+      beats: meta.beats || [],
+      votesUnlockAt: meta.votesUnlockAt,
+    });
+    return true;
+  }
+  if (st === "results" && meta.results) {
+    ctx.navigate(mountResultsScreen, {
+      mpWs: ws,
+      playerId: ctx.playerId,
+      results: meta.results,
+    });
+    return true;
+  }
+  return false;
+}
+
+/**
+ * @param {HTMLElement} root
+ * @param {object} ctx
+ * @param {(sounds: Record<string, string>) => void} start
+ * @param {{ getCancelled: () => boolean }} opts
+ */
+async function buildKitClientSide(root, ctx, start, opts) {
+  const meta = await fetchLobbyKitMeta(ctx);
+  if (opts.getCancelled()) return;
+  if (tryNavigatePastCookPhase(ctx, ctx.mpWs, meta)) return;
+
+  const { seed, spice } = meta;
   const apiBase = getApiBase();
   const ac = new AudioContext({ sampleRate: 44100 });
   let drumsPending = true;
@@ -141,8 +205,45 @@ async function buildKitClientSide(root, ctx, start) {
     </div>`;
   const loadEl = root.querySelector("#cook-load");
 
+  let stopPhasePoll = () => {};
+  stopPhasePoll = pollMatchSync(
+    String(ctx.lobbyId),
+    (sync) => {
+      if (opts.getCancelled()) return;
+      const st = sync.match_state != null ? String(sync.match_state) : "";
+      const ur = sync.upload_deadline_ts;
+      if (st === "upload" && ur != null && Number.isFinite(Number(ur))) {
+        ctx.navigate(mountUploadScreen, {
+          mpWs: ctx.mpWs,
+          playerId: ctx.playerId,
+          lobbyId: ctx.lobbyId,
+          uploadDeadlineTs: Number(ur),
+        });
+      } else if (st === "voting") {
+        ctx.navigate(mountVotingSlideshowScreen, {
+          mpWs: ctx.mpWs,
+          playerId: ctx.playerId,
+          lobbyId: ctx.lobbyId,
+          beats: Array.isArray(sync.beats) ? sync.beats : [],
+          votesUnlockAt: sync.votes_unlock_at,
+        });
+      } else if (st === "results" && sync.results && typeof sync.results === "object") {
+        ctx.navigate(mountResultsScreen, {
+          mpWs: ctx.mpWs,
+          playerId: ctx.playerId,
+          results: sync.results,
+        });
+      }
+    },
+    4500,
+  );
+
   try {
     const manifest = await fetchKitManifest(apiBase);
+    if (opts.getCancelled()) {
+      stopPhasePoll();
+      return;
+    }
     const drumPromise = loadDrumKitBase64Parallel({
       seed,
       spice,
@@ -164,15 +265,29 @@ async function buildKitClientSide(root, ctx, start) {
         manifest,
       });
 
+    if (opts.getCancelled()) {
+      stopPhasePoll();
+      return;
+    }
     if (loadEl) loadEl.textContent = "";
 
     await runSynthReveal(ac, synthBuffers, () => drumsPending);
+    if (opts.getCancelled()) {
+      stopPhasePoll();
+      return;
+    }
 
     const drumSounds = await drumPromise;
+    if (opts.getCancelled()) {
+      stopPhasePoll();
+      return;
+    }
     const sounds = { ...drumSounds, ...synthB64 };
     await ac.close().catch(() => {});
+    stopPhasePoll();
     start(sounds);
   } catch (e) {
+    stopPhasePoll();
     await ac.close().catch(() => {});
     throw e;
   }
@@ -182,9 +297,11 @@ async function buildKitClientSide(root, ctx, start) {
  * @param {HTMLElement} root
  * @param {object} ctx
  * @param {Record<string, string>} sounds
+ * @param {{ initialCookRemainingS?: number | null; onBridgeDetach?: () => void }} [phaseOpts]
  * @returns {() => void}
  */
-function setupCookUI(root, ctx, sounds) {
+function setupCookUI(root, ctx, sounds, phaseOpts) {
+  phaseOpts?.onBridgeDetach?.();
   const ws = ctx.mpWs;
   const playerId = ctx.playerId;
   const lobbyId = ctx.lobbyId;
@@ -192,6 +309,11 @@ function setupCookUI(root, ctx, sounds) {
   let remaining = cookMin * 60;
   /** Wall-clock end of cook phase; updated by server `timer_update`, displayed via local tick. */
   let cookEndAtMs = Date.now() + remaining * 1000;
+  const initRs = phaseOpts?.initialCookRemainingS;
+  if (initRs != null && Number.isFinite(initRs)) {
+    remaining = Math.max(0, Math.floor(initRs));
+    cookEndAtMs = Date.now() + remaining * 1000;
+  }
   let preserveWs = false;
   let selfFinished = false;
   /** @type {ReturnType<typeof setInterval> | null} */
@@ -478,17 +600,81 @@ export function mountCookScreen(root, ctx) {
 
   let cancelled = false;
   let innerCleanup = () => {};
+  /** Server-aligned seconds while kit loads (from `timer_update`). */
+  const pending = { lastCookRemainingS: /** @type {number | null} */ null };
+  let bridgeActive = true;
+
+  const bridgeOnMessage = (ev) => {
+    if (!bridgeActive) return;
+    let m;
+    try {
+      m = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    ingestMpChatMessage(m);
+    if (m.type === "lobby_dissolved") {
+      bridgeActive = false;
+      void navigateToMenuAfterLobbyDissolved(ctx, ws, m);
+      return;
+    }
+    notifyMpPlayerJoin(m, ctx.playerId);
+    notifyMpPlayerLeave(m, ctx.playerId);
+    if (m.type === "error") {
+      mpChatHandleErrorPayload(m);
+      notifyMpServerError(m);
+    }
+    if (m.type === "timer_update" && m.phase === "cooking") {
+      const rs = m.remaining_s;
+      if (rs != null && Number.isFinite(Number(rs))) {
+        pending.lastCookRemainingS = Math.max(0, Number(rs));
+      }
+    }
+    if (m.type === "upload_phase_start") {
+      cancelled = true;
+      bridgeActive = false;
+      ctx.navigate(mountUploadScreen, {
+        mpWs: ws,
+        playerId: ctx.playerId,
+        lobbyId: ctx.lobbyId,
+        uploadDeadlineTs: m.upload_deadline_ts,
+      });
+    }
+  };
+
+  const prevOnClose = ws.onclose;
+  ws.onclose = () => {
+    if (bridgeActive && !cancelled) {
+      showServerRestartingWait();
+    }
+    if (typeof prevOnClose === "function") {
+      try {
+        prevOnClose();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+  ws.onmessage = bridgeOnMessage;
 
   const start = (/** @type {Record<string, string>} */ sounds) => {
     if (cancelled) return;
-    innerCleanup = setupCookUI(root, ctx, sounds);
+    bridgeActive = false;
+    const initial = pending.lastCookRemainingS;
+    pending.lastCookRemainingS = null;
+    innerCleanup = setupCookUI(root, ctx, sounds, {
+      initialCookRemainingS: initial,
+      onBridgeDetach: () => {},
+    });
   };
 
   if (kitNeedsFetch(ctx.sounds)) {
     mountAuthCornerLeave(ctx);
     void (async () => {
       try {
-        await buildKitClientSide(root, ctx, start);
+        await buildKitClientSide(root, ctx, start, {
+          getCancelled: () => cancelled,
+        });
       } catch (e) {
         if (!cancelled) {
           const msg = e instanceof Error ? e.message : "Unknown error";
@@ -508,14 +694,37 @@ export function mountCookScreen(root, ctx) {
     })();
     return () => {
       cancelled = true;
+      bridgeActive = false;
       innerCleanup();
       root.innerHTML = "";
     };
   }
 
-  start(ctx.sounds);
+  void (async () => {
+    try {
+      const meta = await fetchLobbyKitMeta(ctx);
+      if (cancelled) return;
+      if (tryNavigatePastCookPhase(ctx, ws, meta)) {
+        cancelled = true;
+        bridgeActive = false;
+        return;
+      }
+      if (meta.cookRemainingS != null && Number.isFinite(meta.cookRemainingS)) {
+        pending.lastCookRemainingS = meta.cookRemainingS;
+      }
+      start(ctx.sounds);
+    } catch (e) {
+      if (!cancelled) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        showAppError({ message: msg, errorCode: "KIT_SYNC" });
+        import("./multiplayerHub.js").then((m) => ctx.navigate(m.mountMultiplayerHubScreen));
+      }
+    }
+  })();
+
   return () => {
     cancelled = true;
+    bridgeActive = false;
     innerCleanup();
     root.innerHTML = "";
   };

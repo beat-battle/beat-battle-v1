@@ -143,6 +143,56 @@ export async function fetchDecodeResample(audioContext, apiBase, relPath) {
   return resampleTo44100(decoded);
 }
 
+function writeStr(view, offset, s) {
+  for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
+}
+
+/**
+ * Encode an AudioBuffer as base64 PCM16 WAV (legacy helper; kit payloads use MP3).
+ * @param {AudioBuffer} buffer
+ * @returns {string} base64 WAV
+ */
+export function audioBufferToWavBase64(buffer) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const length = buffer.length;
+  const blockAlign = numChannels * 2;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = length * blockAlign;
+  const arrayBuffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(arrayBuffer);
+  writeStr(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(view, 8, "WAVE");
+  writeStr(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  writeStr(view, 36, "data");
+  view.setUint32(40, dataSize, true);
+  let o = 44;
+  for (let i = 0; i < length; i++) {
+    for (let c = 0; c < numChannels; c++) {
+      let s = buffer.getChannelData(c)[i];
+      s = Math.max(-1, Math.min(1, s));
+      const v = Math.max(-32768, Math.min(32767, Math.round(s * 32767)));
+      view.setInt16(o, v, true);
+      o += 2;
+    }
+  }
+  const bytes = new Uint8Array(arrayBuffer);
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+  }
+  return btoa(bin);
+}
+
 /**
  * @param {object} p
  * @param {number} p.seed
