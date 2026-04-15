@@ -1,5 +1,5 @@
 /**
- * Global leaderboard by wins.
+ * Wins leaderboard — sorted, that's it.
  */
 import { fetchLeaderboard, isLoggedIn } from "../authApi.js";
 import { escapeHtml, rankBadgeHtml } from "../rankUi.js";

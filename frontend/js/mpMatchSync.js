@@ -1,5 +1,5 @@
 /**
- * HTTP match sync when WebSocket phase messages are missed (recovery + polling).
+ * WS missed a phase change? Poll HTTP and catch up.
  */
 import { authHeaders } from "./authApi.js";
 import { getApiBase } from "./apiOrigin.js";

@@ -1,5 +1,5 @@
 /**
- * CookScreen — shared kit preview, download, 10:00 server timer.
+ * Cook phase: kit grid, download, server timer counting down.
  */
 import { authHeaders, fetchMe } from "../authApi.js";
 import { RANK_BASELINE_KEY } from "../rankUi.js";
@@ -22,7 +22,15 @@ import {
 } from "../kitFromSeed.js";
 import { runSynthReveal } from "../synthReveal.js";
 import { mountKitLayoutShell } from "../kitGridLayout.js";
-import { pollMatchSync } from "../mpMatchSync.js";
+import {
+  applyMatchWsToLobby,
+  lobbyLikeFromMatchSync,
+  normalizeLobbyLike,
+  phaseTimerRowHtml,
+  syncMatchProgressHint,
+  updatePhaseTimerBar,
+} from "../mpMatchRoster.js";
+import { fetchMatchSync, pollMatchSync } from "../mpMatchSync.js";
 import { ingestMpChatMessage, mountMpChat, mpChatHandleErrorPayload } from "../mpChat.js";
 import { mountUploadScreen } from "./upload.js";
 import { mountVotingSlideshowScreen } from "./votingSlideshow.js";
@@ -102,12 +110,6 @@ function getWaveSurfer() {
   throw new Error("WaveSurfer not loaded");
 }
 
-function formatTime(totalS) {
-  const m = Math.floor(totalS / 60);
-  const s = totalS % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
 function kitNeedsFetch(sounds) {
   if (!sounds || typeof sounds !== "object") return true;
   return !SOUND_KEYS.every((k) => Boolean(sounds[k]));
@@ -130,6 +132,7 @@ async function fetchLobbyKitMeta(ctx) {
   if (data.seed == null || data.spice == null) throw new Error("Invalid kit metadata.");
   const ur = data.upload_deadline_ts;
   const vu = data.votes_unlock_at;
+  const vc = data.votes_close_at;
   return {
     seed: Number(data.seed),
     spice: Number(data.spice),
@@ -141,6 +144,7 @@ async function fetchLobbyKitMeta(ctx) {
     uploadDeadlineTs: ur != null && Number.isFinite(Number(ur)) ? Number(ur) : null,
     beats: Array.isArray(data.beats) ? data.beats : null,
     votesUnlockAt: vu != null && Number.isFinite(Number(vu)) ? Number(vu) : undefined,
+    votesCloseAt: vc != null && Number.isFinite(Number(vc)) ? Number(vc) : undefined,
     results: data.results && typeof data.results === "object" ? data.results : null,
   };
 }
@@ -169,6 +173,7 @@ function tryNavigatePastCookPhase(ctx, ws, meta) {
       lobbyId: ctx.lobbyId,
       beats: meta.beats || [],
       votesUnlockAt: meta.votesUnlockAt,
+      votesCloseAt: meta.votesCloseAt,
     });
     return true;
   }
@@ -226,6 +231,7 @@ async function buildKitClientSide(root, ctx, start, opts) {
           lobbyId: ctx.lobbyId,
           beats: Array.isArray(sync.beats) ? sync.beats : [],
           votesUnlockAt: sync.votes_unlock_at,
+          votesCloseAt: sync.votes_close_at,
         });
       } else if (st === "results" && sync.results && typeof sync.results === "object") {
         ctx.navigate(mountResultsScreen, {
@@ -307,7 +313,7 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
   const lobbyId = ctx.lobbyId;
   const cookMin = Number(ctx.cookDurationMin) || 10;
   let remaining = cookMin * 60;
-  /** Wall-clock end of cook phase; updated by server `timer_update`, displayed via local tick. */
+  /** When cook ends (server nudges this via timer_update; we redraw every second). */
   let cookEndAtMs = Date.now() + remaining * 1000;
   const initRs = phaseOpts?.initialCookRemainingS;
   if (initRs != null && Number.isFinite(initRs)) {
@@ -338,21 +344,48 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
 
   root.innerHTML = `
     <div class="screen cook arcade-panel">
-      <h2 class="arcade-heading">COOK TIMER</h2>
-      <div class="cook-timer" id="cook-timer">00:00</div>
-      <p class="arcade-hint cook-connection-hint hidden" id="cook-connection-hint">Connection lost — timer may not match the server.</p>
-      <p class="arcade-hint">Head to your DAW — kit is below. Download before time ends.</p>
-      <div class="cook-actions">
-        <button type="button" class="arcade-btn arcade-btn-secondary" id="mp-download-kit">Download kit (ZIP)</button>
-        <button type="button" class="arcade-btn arcade-btn-primary" id="mp-finished">Finished</button>
+      <div class="mp-panel-head">
+        <h2 class="arcade-heading mp-panel-head-title">COOK!</h2>
+        <div class="mp-panel-head-timer">${phaseTimerRowHtml("mp-cook-phase")}</div>
+        <div class="mp-panel-head-roster">
+          <span id="mp-corner-cook" class="mp-progress-hint-wrap hidden" aria-live="polite"></span>
+        </div>
       </div>
-      <p class="arcade-hint cook-finished-hint hidden" id="mp-finished-hint" aria-live="polite"></p>
+      <p class="arcade-hint cook-connection-hint hidden" id="cook-connection-hint">Connection lost — timer may not match the server.</p>
+      <div class="cook-download-row">
+        <button type="button" class="arcade-btn arcade-btn-secondary cook-action-btn" id="mp-download-kit">Download all</button>
+        <button type="button" class="arcade-btn arcade-btn-primary cook-action-btn" id="mp-finished">Finished</button>
+      </div>
       <div id="mp-sound-grid" class="kit-layout mp-grid" aria-label="Match kit"></div>
     </div>
   `;
 
-  const timerEl = root.querySelector("#cook-timer");
   const grid = root.querySelector("#mp-sound-grid");
+  const cookTotalSec = Math.max(1, cookMin * 60);
+  /** @type {ReturnType<typeof normalizeLobbyLike>} */
+  let lobbyView = normalizeLobbyLike({});
+  const syncProgressHint = () => syncMatchProgressHint(root, "mp-corner-cook", "cook", lobbyView);
+
+  void (async () => {
+    const sync = await fetchMatchSync(String(lobbyId));
+    const L = lobbyLikeFromMatchSync(sync);
+    if (L && Array.isArray(L.players) && L.players.length) {
+      lobbyView = normalizeLobbyLike(L);
+      syncProgressHint();
+    }
+  })();
+
+  const stopLobbySyncPoll = pollMatchSync(
+    String(lobbyId),
+    (sync) => {
+      const L = lobbyLikeFromMatchSync(sync);
+      if (L && Array.isArray(L.players) && L.players.length) {
+        lobbyView = normalizeLobbyLike(L);
+        syncProgressHint();
+      }
+    },
+    5000,
+  );
 
   const bindWaveformPlayback = (key, waveWrap, audio) => {
     const setClickFull = (v) => clickFullPlayback.set(key, v);
@@ -453,13 +486,9 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
     });
   });
 
-  const tickTimer = () => {
-    if (timerEl) timerEl.textContent = formatTime(remaining);
-  };
-
   const syncRemainingFromDeadline = () => {
     remaining = Math.max(0, Math.ceil((cookEndAtMs - Date.now()) / 1000));
-    tickTimer();
+    updatePhaseTimerBar(root, "mp-cook-phase", cookTotalSec, remaining);
   };
 
   syncRemainingFromDeadline();
@@ -471,7 +500,6 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
   });
 
   const finishedBtn = root.querySelector("#mp-finished");
-  const finishedHint = root.querySelector("#mp-finished-hint");
   const setFinishedUi = () => {
     if (finishedBtn instanceof HTMLButtonElement) {
       finishedBtn.disabled = selfFinished;
@@ -485,7 +513,7 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
     playSfxMinor();
     selfFinished = true;
     setFinishedUi();
-    if (finishedHint) finishedHint.classList.remove("hidden");
+    syncProgressHint();
     try {
       ws.send(JSON.stringify({ type: "cook_finished" }));
     } catch {
@@ -530,13 +558,14 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
       }
       syncRemainingFromDeadline();
     }
-    if (m.type === "cook_finished_update" && Array.isArray(m.finished_player_ids)) {
-      const n = m.finished_player_ids.length;
-      const total = Math.max(1, Number(m.player_count) || n);
-      if (finishedHint && n > 0) {
-        finishedHint.classList.remove("hidden");
-        finishedHint.textContent = `${n} / ${total} finished`;
-      }
+    if (
+      m.type === "lobby_update" ||
+      m.type === "cook_finished_update" ||
+      m.type === "beat_uploaded" ||
+      m.type === "vote_cast"
+    ) {
+      lobbyView = applyMatchWsToLobby(lobbyView, m);
+      syncProgressHint();
     }
     if (m.type === "upload_phase_start") {
       preserveWs = true;
@@ -569,6 +598,7 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
   ws.onmessage = onMessage;
 
   return () => {
+    stopLobbySyncPoll();
     unmountMpChat();
     if (localTimerId != null) {
       clearInterval(localTimerId);
@@ -600,7 +630,7 @@ export function mountCookScreen(root, ctx) {
 
   let cancelled = false;
   let innerCleanup = () => {};
-  /** Server-aligned seconds while kit loads (from `timer_update`). */
+  /** Seconds left while we're still fetching stems — timer_update hammers this in. */
   const pending = { lastCookRemainingS: /** @type {number | null} */ null };
   let bridgeActive = true;
 

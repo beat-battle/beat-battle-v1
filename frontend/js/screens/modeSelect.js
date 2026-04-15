@@ -1,5 +1,5 @@
 /**
- * ModeSelectScreen — Solo Cook vs Multiplayer Cook.
+ * Pick solo or jump into multiplayer.
  */
 import { isLoggedIn } from "../authApi.js";
 import { RANK_PENDING_KEY, showRankUpOverlay } from "../rankUi.js";

@@ -117,4 +117,8 @@ class Lobby:
             ],
             "drumkit": drumkit,
             "votes": dict(self.votes),
+            "player_count": len(self.players),
+            "cook_finished": sorted(self.cook_finished),
+            "uploaded": sorted(self.uploaded),
+            "slideshow_completed": sorted(self.slideshow_completed),
         }

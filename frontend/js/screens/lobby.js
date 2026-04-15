@@ -1,5 +1,5 @@
 /**
- * LobbyScreen — player list, ready, start_game → Cook.
+ * Pre-game room: roster, ready up, host starts → cook.
  */
 import { notifyMpServerError } from "../errorToast.js";
 import { showServerRestartingWait } from "../serverRestartOverlay.js";
@@ -7,6 +7,7 @@ import {
   navigateToMenuAfterLobbyDissolved,
   notifyMpPlayerJoin,
   notifyMpPlayerLeave,
+  showKickedFromMatchToast,
 } from "../mpPresenceToast.js";
 import { mountAuthCornerLeave } from "../authCorner.js";
 import { escapeHtml, rankBadgeHtml } from "../rankUi.js";
@@ -41,16 +42,35 @@ function renderLobby(root, lobby, selfId, kitProgress) {
     label && step > 0
       ? `${step} / ${total} — ${String(label).replace(/_/g, " ")}`
       : `${step} / ${total}`;
+  const lobbyState = String(lobby.state ?? "");
+  const canKick = isHost && !generating && lobbyState === "lobby";
+
   const rows = players
-    .map(
-      (p) => `
-    <div class="lobby-row">
-      <span class="lobby-name">${supporterDisplayNameInnerHtml(p.name)}${rankBadgeHtml(p.rank)}${p.id === hostId ? " · host" : ""}</span>
+    .map((p) => {
+      const pid = String(p.id ?? "");
+      const isSelf = Boolean(selfId && pid === String(selfId));
+      const kickSlot =
+        canKick && !isSelf
+          ? `<span class="lobby-kick-slot">
+        <button type="button" class="lobby-kick-btn" data-kick-id="${escapeHtml(pid)}" aria-label="Kick">−</button>
+        <span class="lobby-kick-tip" role="tooltip">Kick</span>
+      </span>`
+          : "";
+      const nameWrapClass =
+        kickSlot !== "" ? "lobby-row-name-wrap lobby-row-name-wrap--kick-hover" : "lobby-row-name-wrap";
+      return `
+    <div class="lobby-row${kickSlot !== "" ? " lobby-row--kickable" : ""}">
+      <div class="${nameWrapClass}">
+        ${kickSlot}
+        <span class="lobby-name">${supporterDisplayNameInnerHtml(p.name)}${rankBadgeHtml(p.rank)}${p.id === hostId ? " · host" : ""}</span>
+      </div>
       <span class="lobby-ready">${p.ready ? "✔" : ""}</span>
     </div>
-  `,
-    )
+  `;
+    })
     .join("");
+
+  const selfReady = Boolean(selfId && players.some((p) => String(p.id) === String(selfId) && p.ready));
 
   const hostDuration = isHost
     ? `
@@ -75,7 +95,9 @@ function renderLobby(root, lobby, selfId, kitProgress) {
       <div class="lobby-list">${rows}</div>
       <p class="arcade-error" id="lobby-err"></p>
       <div class="arcade-actions"${generating ? ' hidden' : ""}>
-        <button type="button" class="arcade-btn arcade-btn-primary" id="btn-ready">READY</button>
+        <button type="button" class="arcade-btn arcade-btn-primary" id="btn-ready"${
+          selfReady ? " disabled" : ""
+        }>READY</button>
         <button type="button" class="arcade-btn arcade-btn-secondary" id="btn-leave">Leave</button>
       </div>
       ${
@@ -133,6 +155,18 @@ export function mountLobbyScreen(root, ctx) {
     }
     notifyMpPlayerJoin(m, playerId);
     notifyMpPlayerLeave(m, playerId);
+    if (m.type === "kicked_from_lobby") {
+      intentionalLeave = true;
+      showKickedFromMatchToast();
+      clearMpChatSession();
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      import("./modeSelect.js").then((mod) => ctx.navigate(mod.mountModeSelectScreen));
+      return;
+    }
     if (m.type === "lobby_update" && m.lobby) {
       lobby = m.lobby;
       if (m.lobby.state !== "generating") kitProgress = null;
@@ -201,10 +235,29 @@ export function mountLobbyScreen(root, ctx) {
   const clickHandler = (e) => {
     const t = e.target;
     const origin = t instanceof Element ? t : t && "parentElement" in t ? t.parentElement : null;
+    const kickBtn = origin?.closest?.(".lobby-kick-btn");
+    if (kickBtn instanceof HTMLButtonElement) {
+      const tid = kickBtn.dataset.kickId;
+      if (!tid) return;
+      playSfxMinor();
+      if (ws.readyState !== WebSocket.OPEN) {
+        const err = errEl();
+        if (err) err.textContent = "Not connected.";
+        return;
+      }
+      try {
+        ws.send(JSON.stringify({ type: "kick_player", target_player_id: tid }));
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     const btn = origin?.closest?.("#btn-ready, #btn-leave");
     if (!btn) return;
 
     if (btn.id === "btn-ready") {
+      const pl = lobby.players || [];
+      if (pl.some((p) => String(p.id) === String(playerId) && p.ready)) return;
       if (/** @type {HTMLButtonElement} */ (btn).disabled) return;
       playSfxMajor();
       if (ws.readyState !== WebSocket.OPEN) {
@@ -212,11 +265,10 @@ export function mountLobbyScreen(root, ctx) {
         if (err) err.textContent = "Not connected. Leave and rejoin.";
         return;
       }
-      /** @type {HTMLButtonElement} */ (btn).disabled = true;
       try {
         ws.send(JSON.stringify({ type: "player_ready" }));
       } catch {
-        /** @type {HTMLButtonElement} */ (btn).disabled = false;
+        /* keep button usable — lobby state unchanged */
       }
       return;
     }

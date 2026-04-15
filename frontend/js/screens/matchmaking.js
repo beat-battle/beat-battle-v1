@@ -1,5 +1,5 @@
 /**
- * Matchmaking — WebSocket: create_lobby or join_lobby → lobby_update → Lobby.
+ * Queue up: WS create or join, then you land in the lobby.
  */
 import { getUsername, validateSession } from "../authApi.js";
 import { getWsUrl } from "../apiOrigin.js";
@@ -55,7 +55,7 @@ export function mountMatchmakingScreen(root, ctx) {
   let cancelled = false;
   /** @type {WebSocket | null} */
   let ws = null;
-  /** When true, WebSocket is passed to Lobby — do not close on unmount. */
+  /** Lobby owns the socket now — don't close it when this screen unmounts. */
   let handedOffWs = false;
 
   const setStatus = (msg) => {

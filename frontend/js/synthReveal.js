@@ -1,13 +1,13 @@
 /**
- * Full-viewport synth reveal (appended to document.body). Not clipped by app-root / screen bounds.
+ * Big synth reveal — pinned to document.body so nothing clips it.
  */
 import { SYNTH_KEYS } from "./kitFromSeed.js";
 
 const REVEAL_STAGGER_MS = 1000;
 const SYNTH_PREVIEW_MAX_SEC = 2;
-/** Extra ms after expected playback; some Chromium/Brave builds skip `onended`. */
+/** Browsers sometimes ghost onended — pad the end a bit. */
 const PREVIEW_END_GRACE_MS = 400;
-/** If drum fetch never settles, do not block the reveal forever. */
+/** Don't wait on drums forever if the net's being weird. */
 const WAIT_FOR_DRUMS_MAX_MS = 120_000;
 
 /**

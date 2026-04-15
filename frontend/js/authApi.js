@@ -1,5 +1,5 @@
 /**
- * Auth token, username, and API helpers.
+ * Token in localStorage, fetch wrappers, the boring stuff.
  */
 import { getApiBase } from "./apiOrigin.js";
 
@@ -38,7 +38,7 @@ export function authHeadersMultipart() {
   return h;
 }
 
-/** Bearer only (e.g. GET /me). */
+/** No Content-Type — fine for /me-style GETs. */
 export function authBearerOnly() {
   const t = getToken();
   const h = {};
@@ -50,7 +50,7 @@ export function isLoggedIn() {
   return Boolean(getToken());
 }
 
-/** Returns false if 401 (session cleared). True if ok or non-auth error (keeps token). */
+/** 401 = session cleared. Random network fail = keep token and hope. */
 export async function validateSession() {
   const t = getToken();
   if (!t) return false;
@@ -108,7 +108,7 @@ export async function fetchLeaderboard() {
   return res.json();
 }
 
-/** Current user profile (requires Bearer). */
+/** /me — who am I? Needs Bearer. */
 export async function fetchMe() {
   const base = getApiBase();
   const res = await fetch(`${base}/me`, { headers: authBearerOnly() });

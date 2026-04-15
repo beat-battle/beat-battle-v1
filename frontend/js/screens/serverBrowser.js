@@ -1,5 +1,5 @@
 /**
- * Lists public lobbies from GET /api/lobbies; join selects lobby_id.
+ * Open games from /api/lobbies — tap one to join by id.
  */
 import { getUsername } from "../authApi.js";
 import { mountAuthCornerLeave } from "../authCorner.js";

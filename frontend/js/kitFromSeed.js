@@ -1,5 +1,5 @@
 /**
- * Client-side light kit: same indices as ``backend/kit_rng.pick_index`` + manifest paths.
+ * Build the same kit the server would — pick_index + paths from /api/kit-manifest.
  */
 
 const MANIFEST_STORAGE_KEY = "bb_kit_manifest_v4";
@@ -24,7 +24,7 @@ export const SYNTH_KEYS = ["synth1", "synth2", "synth3"];
 
 export const DRUM_KEYS = KIT_SOUND_KEYS.filter((k) => !k.startsWith("synth"));
 
-/** Dataset / API kit stems are MP3; ZIP and single-file downloads use this extension. */
+/** Stems on disk are mp3; zips use this too. */
 export const KIT_SOUND_FILE_EXT = "mp3";
 
 function float32Bits(x) {
@@ -148,7 +148,7 @@ function writeStr(view, offset, s) {
 }
 
 /**
- * Encode an AudioBuffer as base64 PCM16 WAV (legacy helper; kit payloads use MP3).
+ * Old WAV helper — kits ship as MP3 now but this still shows up in a few places.
  * @param {AudioBuffer} buffer
  * @returns {string} base64 WAV
  */
@@ -231,8 +231,7 @@ export async function loadSynthBuffersAndMp3Base64Parallel({
 }
 
 /**
- * Synth stems as decoded buffers only (same fetches as {@link loadSynthBuffersAndMp3Base64Parallel}).
- * Kept for callers that still import this name.
+ * Same work as loadSynthBuffers… — some screens still import this name only.
  * @param {object} p
  * @param {number} p.seed
  * @param {number} p.spice
@@ -281,7 +280,7 @@ export async function loadDrumKitBase64Parallel({
 }
 
 /**
- * Full kit as base64 MP3 map (sequential; use phased helpers for UX).
+ * Slow path: one stem at a time. Prefer the parallel helpers if you want a progress bar.
  * @param {object} p
  * @param {number} p.seed
  * @param {number} p.spice

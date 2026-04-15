@@ -1,5 +1,5 @@
 /**
- * UI sound effects (paths relative to this module → ../sfx/).
+ * Little UI bleeps. Audio files sit in ../sfx/ next to this file.
  */
 const dir = new URL("../sfx/", import.meta.url);
 
@@ -27,12 +27,12 @@ function playFile(filename, volume = 0.88) {
   }
 }
 
-/** Big steps: generate kit, enter matchmaking, ready, upload beat, cast vote, etc. */
+/** Louder stingers — kit roll, matchmaking, votes, that vibe. */
 export function playSfxMajor() {
   playFile("UIMajor.mp3");
 }
 
-/** Routine navigation / secondary actions. */
+/** Softer taps — menus, back, nothing dramatic. */
 export function playSfxMinor() {
   playFile("UIMinor.mp3");
 }
@@ -45,17 +45,17 @@ export function playSfxOff() {
   playFile("UIOff.mp3");
 }
 
-/** Multiplayer match / cook phase begins. */
+/** Round actually starts — you know this sting. */
 export function playSfxBeatBattle() {
   playFile("BeatBattle.mp3", 0.92);
 }
 
-/** Upload phase: window is open — time to upload your beat. */
+/** Upload window — panic gently. */
 export function playSfxUploadAlarm() {
   playFile("Alarm.mp3", 0.88);
 }
 
-/** Everyone else left mid-match — same asset as upload alarm. */
+/** Empty lobby — same clip as upload; felt right. */
 export function playSfxSoloMatchAlarm() {
   playFile("Alarm.mp3", 0.88);
 }

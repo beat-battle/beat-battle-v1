@@ -1,5 +1,5 @@
 /**
- * VotingSlideshowScreen — play up to 45s of each beat; waveform matches audible clip.
+ * Voting round: each beat plays (capped at 45s), waveform matches what you hear.
  */
 import { authHeadersMultipart } from "../authApi.js";
 import { mountAuthCornerLeave } from "../authCorner.js";
@@ -12,7 +12,16 @@ import {
 } from "../mpPresenceToast.js";
 import { ingestMpChatMessage, mountMpChat, mpChatHandleErrorPayload } from "../mpChat.js";
 import { supporterDisplayNameInnerHtml } from "../supporters.js";
-import { pollMatchSync } from "../mpMatchSync.js";
+import {
+  applyMatchWsToLobby,
+  lobbyLikeFromMatchSync,
+  normalizeLobbyLike,
+  phaseTimerRowHtml,
+  progressHintSlotHtml,
+  syncMatchProgressHint,
+  updatePhaseTimerBar,
+} from "../mpMatchRoster.js";
+import { fetchMatchSync, pollMatchSync } from "../mpMatchSync.js";
 import { playSfxMinor } from "../sfx.js";
 import { mountResultsScreen } from "./results.js";
 import { mountVoteSelectionScreen } from "./voteSelection.js";
@@ -37,7 +46,10 @@ const BEAT_REACTION_ARIA = {
 
 const CLIP_MAX_SEC = 45;
 
-/** Min ms between beat reaction sends (client-side; reduces spam). */
+/** Fallback if server omits `votes_close_at` (matches backend `VOTING_COLLECT_S`). */
+const VOTE_COLLECT_FALLBACK_S = 30;
+
+/** Don't spam reactions — server would yell anyway. */
 const BEAT_REACTION_COOLDOWN_MS = 3000;
 
 const BEAT_TOAST_VISIBLE_MS = 1000;
@@ -67,7 +79,7 @@ function clipAudioBuffer(ac, input, maxSec) {
   return out;
 }
 
-/** 16-bit PCM WAV for WaveSurfer + `<audio>`. */
+/** Tiny WAV blob so WaveSurfer is happy. */
 function audioBufferToWav(buffer) {
   const numChannels = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
@@ -127,10 +139,19 @@ export function mountVotingSlideshowScreen(root, ctx) {
   const playerId = ctx.playerId;
   const lobbyId = ctx.lobbyId;
   const beats = ctx.beats || [];
-  const votesUnlockAt = ctx.votesUnlockAt;
+  let votesUnlockWall =
+    typeof ctx.votesUnlockAt === "number" && Number.isFinite(ctx.votesUnlockAt)
+      ? ctx.votesUnlockAt
+      : null;
+  let votesCloseAt =
+    typeof ctx.votesCloseAt === "number" && Number.isFinite(ctx.votesCloseAt)
+      ? ctx.votesCloseAt
+      : votesUnlockWall != null
+        ? votesUnlockWall + VOTE_COLLECT_FALLBACK_S
+        : null;
   let preserveWs = false;
   let resultsPollNav = false;
-  /** True while unmount closes the socket on purpose (avoid restart overlay). */
+  /** We killed the socket on purpose — don't flash "server restarting". */
   let teardownClose = false;
   let activeWsur = null;
   let idx = 0;
@@ -144,9 +165,51 @@ export function mountVotingSlideshowScreen(root, ctx) {
       ? mountMpChat({ ws: wsSock, playerId, continueSession: true })
       : () => {};
 
+  /** @type {ReturnType<typeof normalizeLobbyLike>} */
+  let lobbyView = normalizeLobbyLike({});
+  const syncProgressHint = () => syncMatchProgressHint(root, "mp-corner-slide", "vote", lobbyView);
+
+  void (async () => {
+    const sync = await fetchMatchSync(String(lobbyId));
+    if (sync && String(sync.match_state) === "voting") {
+      const vu = sync.votes_unlock_at;
+      if (typeof vu === "number" && Number.isFinite(vu)) votesUnlockWall = vu;
+      const vc = sync.votes_close_at;
+      if (typeof vc === "number" && Number.isFinite(vc)) votesCloseAt = vc;
+    }
+    const L = lobbyLikeFromMatchSync(sync);
+    if (L && Array.isArray(L.players) && L.players.length) {
+      lobbyView = normalizeLobbyLike(L);
+      syncProgressHint();
+    }
+  })();
+
+  const voteCollectWindowS = () =>
+    votesCloseAt != null &&
+    votesUnlockWall != null &&
+    votesCloseAt > votesUnlockWall
+      ? votesCloseAt - votesUnlockWall
+      : VOTE_COLLECT_FALLBACK_S;
+
+  const slideMountSec = Date.now() / 1000;
+
   const stopResultsPoll = pollMatchSync(
     String(lobbyId),
     (sync) => {
+      if (!resultsPollNav && !preserveWs) {
+        const L = lobbyLikeFromMatchSync(sync);
+        if (L && Array.isArray(L.players) && L.players.length) {
+          lobbyView = normalizeLobbyLike(L);
+          syncProgressHint();
+        }
+      }
+      if (String(sync.match_state) === "voting") {
+        const vu = sync.votes_unlock_at;
+        if (typeof vu === "number" && Number.isFinite(vu)) votesUnlockWall = vu;
+        const vc = sync.votes_close_at;
+        if (typeof vc === "number" && Number.isFinite(vc)) votesCloseAt = vc;
+        tickSlideDeadline();
+      }
       if (resultsPollNav || preserveWs) return;
       if (String(sync.match_state) !== "results" || !sync.results || typeof sync.results !== "object") {
         return;
@@ -165,7 +228,15 @@ export function mountVotingSlideshowScreen(root, ctx) {
 
   root.innerHTML = `
     <div class="screen slideshow arcade-panel">
-      <h2 class="arcade-heading" id="slide-title">VOTING</h2>
+      <div class="mp-panel-head mp-panel-head--slideshow">
+        <h2 class="arcade-heading mp-panel-head-title" id="slide-title">VOTING</h2>
+        <div class="mp-panel-head-timer">
+          <div class="slideshow-vote-deadline-wrap"${votesCloseAt == null ? " hidden" : ""} aria-live="polite">
+            ${votesCloseAt != null ? phaseTimerRowHtml("mp-slide-vote-phase") : ""}
+          </div>
+        </div>
+        <div class="mp-panel-head-roster">${progressHintSlotHtml("mp-corner-slide")}</div>
+      </div>
       <p class="slide-player" id="slide-player"></p>
       <div id="slide-wave" class="slideshow-wave"></div>
       <div class="slideshow-reactions" id="slideshow-reactions" hidden>
@@ -185,6 +256,26 @@ export function mountVotingSlideshowScreen(root, ctx) {
   const waveEl = root.querySelector("#slide-wave");
   const progEl = root.querySelector("#slide-progress");
   const reactionsEl = root.querySelector("#slideshow-reactions");
+  /** @type {ReturnType<typeof setInterval> | null} */
+  let slideDeadlineInterval = null;
+
+  const tickSlideDeadline = () => {
+    if (votesCloseAt == null || votesUnlockWall == null) return;
+    const now = Date.now() / 1000;
+    const label = root.querySelector("#mp-slide-vote-phase-label");
+    if (now < votesUnlockWall) {
+      const totalListen = Math.max(1, votesUnlockWall - slideMountSec);
+      const remainListen = Math.max(0, votesUnlockWall - now);
+      updatePhaseTimerBar(root, "mp-slide-vote-phase", totalListen, remainListen);
+    } else {
+      const remainVote = Math.max(0, votesCloseAt - now);
+      updatePhaseTimerBar(root, "mp-slide-vote-phase", voteCollectWindowS(), remainVote);
+      if (label && remainVote <= 0) label.textContent = "Closing…";
+    }
+  };
+  tickSlideDeadline();
+  slideDeadlineInterval = window.setInterval(tickSlideDeadline, 500);
+  syncProgressHint();
 
   /** @type {number} */
   let beatReactionCooldownUntil = 0;
@@ -274,12 +365,17 @@ export function mountVotingSlideshowScreen(root, ctx) {
       /* ignore */
     }
     const nowSec = Date.now() / 1000;
+    const wallUnlock =
+      votesUnlockWall != null && Number.isFinite(votesUnlockWall) ? votesUnlockWall : nowSec;
     ctx.navigate(mountVoteSelectionScreen, {
       mpWs: wsSock,
       playerId,
       lobbyId: ctx.lobbyId,
       beats,
-      votesUnlockAt: Math.min(votesUnlockAt ?? nowSec, nowSec),
+      votesUnlockAt: Math.min(wallUnlock, nowSec),
+      votesUnlockWall: wallUnlock,
+      votesCloseAt,
+      slideshowCompleted: true,
     });
   };
 
@@ -481,6 +577,25 @@ export function mountVotingSlideshowScreen(root, ctx) {
         playerId,
       });
     }
+    if (m.type === "votes_timing" && String(m.lobby_id) === String(lobbyId)) {
+      if (typeof m.votes_unlock_at === "number" && Number.isFinite(m.votes_unlock_at)) {
+        votesUnlockWall = m.votes_unlock_at;
+      }
+      if (typeof m.votes_close_at === "number" && Number.isFinite(m.votes_close_at)) {
+        votesCloseAt = m.votes_close_at;
+      }
+      tickSlideDeadline();
+      return;
+    }
+    if (
+      m.type === "lobby_update" ||
+      m.type === "cook_finished_update" ||
+      m.type === "beat_uploaded" ||
+      m.type === "vote_cast"
+    ) {
+      lobbyView = applyMatchWsToLobby(lobbyView, m);
+      syncProgressHint();
+    }
   };
   wsSock.onclose = () => {
     if (preserveWs || teardownClose) return;
@@ -495,6 +610,10 @@ export function mountVotingSlideshowScreen(root, ctx) {
   }
 
   return () => {
+    if (slideDeadlineInterval != null) {
+      clearInterval(slideDeadlineInterval);
+      slideDeadlineInterval = null;
+    }
     stopResultsPoll();
     unmountMpChat();
     if (beatReactionCooldownTimer != null) clearTimeout(beatReactionCooldownTimer);

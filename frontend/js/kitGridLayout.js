@@ -1,5 +1,5 @@
 /**
- * Visual grouping for kit preview (solo + cook). Slot keys match KIT_SOUND_KEYS / backend.
+ * How kit tiles are grouped on screen — keys line up with KIT_SOUND_KEYS / server.
  */
 
 /** @type {{ label: string, keys: string[] }[]} */

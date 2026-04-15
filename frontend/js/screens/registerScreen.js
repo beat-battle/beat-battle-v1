@@ -1,5 +1,5 @@
 /**
- * Register — username + password; then user can log in.
+ * New account — then you still have to log in after.
  */
 import { registerUser } from "../authApi.js";
 import { mountAuthCornerRegisterGuest } from "../authCorner.js";

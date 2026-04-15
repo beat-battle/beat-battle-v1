@@ -1,5 +1,5 @@
 /**
- * Beat Battle — screen router and shared context.
+ * Boots the app: swap screens, hand around ctx, surface ugly JS errors.
  */
 import { getApiBase } from "./apiOrigin.js";
 import { clearAuthCorner } from "./authCorner.js";
@@ -8,6 +8,7 @@ import { showAppError } from "./errorToast.js";
 import { playSfxBeatBattle } from "./sfx.js";
 import { mountModeSelectScreen } from "./screens/modeSelect.js";
 import { initCornerSocialTooltips } from "./cornerSocialTooltips.js";
+import { initCreditsCornerControl } from "./creditsOverlay.js";
 import { initDevStatsPanel, recordPageVisit } from "./devStatsPanel.js";
 import { initSupportersClient } from "./supporters.js";
 
@@ -15,10 +16,12 @@ function boot() {
   initSupportersClient();
   recordPageVisit();
   initCornerSocialTooltips();
+  const creditsBtn = document.getElementById("credits-corner-btn");
+  if (creditsBtn instanceof HTMLElement) initCreditsCornerControl(creditsBtn);
   window.addEventListener("error", (ev) => {
     const fn = ev.filename || "";
     if (!fn || fn.includes("extension://") || fn.includes("moz-extension://")) return;
-    if (!fn.includes("/js/") && !fn.endsWith("main.js")) return;
+    if (!fn.includes("/js/") && !/\/main\.js(\?|$)/.test(fn)) return;
     showAppError({
       message: ev.message || "A script error occurred.",
       errorCode: ev.lineno ? `SCRIPT_L${ev.lineno}` : "SCRIPT",

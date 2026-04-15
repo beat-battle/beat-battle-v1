@@ -1,8 +1,7 @@
 /**
- * Resolution: sessionStorage beatBattleApiBase → port 8000 (local uvicorn) →
- * meta cookup-api (or beat-battle-api) if set → window.location.origin (e.g. Render).
- *
- * Override API: sessionStorage.setItem("beatBattleApiBase", "https://api.example.com"); location.reload();
+ * Where the frontend talks to: sessionStorage override first, then bare :8000 for local uvicorn,
+ * then a meta tag, then whatever origin we're on.
+ * Override: sessionStorage.setItem("beatBattleApiBase", "https://…"); reload.
  */
 function readMetaApiBase() {
   const el =
@@ -23,10 +22,10 @@ export function getApiBase() {
   return window.location.origin;
 }
 
-/** Must match authApi.js TOKEN_KEY (avoid importing authApi here — circular). */
+/** Same storage key as authApi TOKEN_KEY — can't import authApi here (cycles). */
 const WS_TOKEN_KEY = "cookup_token";
 
-/** WebSocket URL for multiplayer (same host as API); appends JWT query param when logged in. */
+/** MP socket; same host as API, ?token= when you're signed in. */
 export function getWsUrl() {
   const u = new URL(getApiBase());
   const proto = u.protocol === "https:" ? "wss:" : "ws:";

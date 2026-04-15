@@ -83,3 +83,23 @@ def test_rematch_migrates_to_new_lobby_and_broadcasts(tmp_path: Path) -> None:
             assert any(p.get("type") == "lobby_update" and p.get("lobby", {}).get("state") == "lobby" for p in payloads)
 
     asyncio.run(run())
+
+
+def test_rematch_does_not_start_with_single_player(tmp_path: Path) -> None:
+    """Solo on results cannot rematch — unanimous with yourself is not allowed."""
+
+    async def run() -> None:
+        mgr = LobbyManager(tmp_path)
+        lid = "SOLO01"
+        p1 = "soloPlayerIdxx"
+        lobby = Lobby(id=lid, spice=0.5, is_public=True)
+        lobby.state = LobbyState.RESULTS
+        lobby.players[p1] = Player(id=p1, name="Solo", user_id=1, wins=0, ready=False)
+        mgr.lobbies[lid] = lobby
+        mgr.player_lobby[p1] = lid
+        mgr.register_auth_session(p1, 1, "Solo")
+        await mgr.rematch_vote(p1)
+        assert lid in mgr.lobbies
+        assert mgr.lobbies[lid].rematch_pending == {p1}
+
+    asyncio.run(run())

@@ -1,5 +1,5 @@
 /**
- * Dev-only stats (owner accounts): side tab toggles slide-out card. Server enforces access.
+ * Slide-out numbers for us — the API still checks you're on the list.
  */
 import { getApiBase } from "./apiOrigin.js";
 import { authBearerOnly, getUsername, isLoggedIn } from "./authApi.js";
@@ -10,6 +10,33 @@ const POLL_MS = 8000;
 const LS_EXPANDED = "dev_stats_panel_expanded";
 
 let pollId = null;
+let slashListenerWired = false;
+
+function isTypingTarget(el) {
+  if (!(el instanceof HTMLElement)) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
+function wireSlashToggle() {
+  if (slashListenerWired) return;
+  slashListenerWired = true;
+  document.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key !== "/" && e.code !== "Slash") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!isLoggedIn() || !isDevUsername()) return;
+      if (isTypingTarget(/** @type {HTMLElement} */ (e.target))) return;
+      e.preventDefault();
+      const el = ensureEl();
+      el.hidden = false;
+      el.classList.toggle("dev-stats-panel--concealed");
+    },
+    true,
+  );
+}
 
 function isDevUsername() {
   const u = getUsername().trim().toLowerCase();
@@ -61,9 +88,8 @@ function ensureEl() {
   if (!el) {
     el = document.createElement("div");
     el.id = "dev-stats-panel";
-    el.className = "dev-stats-panel dev-stats-panel--collapsed";
+    el.className = "dev-stats-panel dev-stats-panel--collapsed dev-stats-panel--concealed";
     el.setAttribute("aria-label", "Developer stats");
-    el.hidden = true;
     el.innerHTML = `
       <div class="dev-stats-panel__card" id="dev-stats-card">
         <div class="dev-stats-panel__label">Dev</div>
@@ -189,6 +215,7 @@ function teardown() {
   const el = document.getElementById("dev-stats-panel");
   if (el) {
     el.hidden = true;
+    el.classList.add("dev-stats-panel--concealed");
   }
 }
 
@@ -216,12 +243,13 @@ async function fetchOnce() {
   void updateDevSupporterListRow(el);
 }
 
-/** Call on boot and after login. Idempotent polling. */
+/** Safe to spam; only one poll loop and only if your user is allowed. */
 export function initDevStatsPanel() {
   if (!isLoggedIn() || !isDevUsername()) {
     teardown();
     return;
   }
+  wireSlashToggle();
   void fetchOnce();
   if (pollId !== null) return;
   pollId = window.setInterval(() => {

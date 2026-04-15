@@ -1,5 +1,5 @@
 /**
- * Global error toasts — server refs, client failures, and top-level script errors.
+ * Red toast when something breaks — ours, the server's, or a script in the wild.
  */
 
 const HOST_ID = "app-error-toast-host";
@@ -74,7 +74,7 @@ export function showAppError(detail) {
   hideTimer = window.setTimeout(removeCard, AUTO_DISMISS_MS);
 }
 
-/** Multiplayer WebSocket `type: "error"` payload (snake_case from server). */
+/** Server sent type:error over MP — snake_case keys, we normalize for the toast. */
 export function notifyMpServerError(m) {
   if (!m || m.type !== "error") return;
   showAppError({

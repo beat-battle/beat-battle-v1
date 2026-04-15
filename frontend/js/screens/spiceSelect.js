@@ -1,5 +1,5 @@
 /**
- * SpiceSelectScreen — heat levels + visibility, then create lobby.
+ * Pick your heat + public or code-only, then we spin up a lobby.
  */
 import { getUsername } from "../authApi.js";
 import { mountAuthCornerLeave } from "../authCorner.js";

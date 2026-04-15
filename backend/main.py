@@ -8,7 +8,9 @@ Then open http://127.0.0.1:8000/
 from __future__ import annotations
 
 import asyncio
+import os
 import random
+import re
 import shutil
 import tempfile
 from contextlib import asynccontextmanager
@@ -16,7 +18,7 @@ from pathlib import Path
 from typing import Any
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, ORJSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
@@ -49,7 +51,26 @@ UPLOADS_ROOT = _PROJECT_ROOT / "uploads"
 FRONTEND_ROOT = _PROJECT_ROOT / "frontend"
 _DATASET_ROOT = _PROJECT_ROOT / "dataset"
 
-MAX_BEAT_BYTES = 15 * 1024 * 1024
+
+def _static_asset_build() -> str:
+    """URL-safe token; bump via env BEAT_BATTLE_STATIC_BUILD on deploy."""
+    raw = os.environ.get("BEAT_BATTLE_STATIC_BUILD", "1").strip() or "1"
+    if re.fullmatch(r"[A-Za-z0-9._-]{1,64}", raw):
+        return raw
+    return "1"
+
+
+STATIC_ASSET_BUILD = _static_asset_build()
+
+
+def _index_html_response() -> HTMLResponse:
+    path = FRONTEND_ROOT / "index.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="index.html not found.")
+    body = path.read_text(encoding="utf-8").replace("__STATIC_BUILD__", STATIC_ASSET_BUILD)
+    return HTMLResponse(content=body, headers={"Cache-Control": "no-cache"})
+
+MAX_BEAT_BYTES = 30 * 1024 * 1024
 
 _ALLOWED_DEV_STATS_USERS = frozenset({"psyalysis", "polystalgia"})
 
@@ -119,8 +140,10 @@ app.add_middleware(
 
 
 def _static_cache_control(path: str) -> str | None:
-    """Long cache for versioned-by-deploy assets; HTML always revalidates."""
-    if path.startswith("/sfx/") or path.startswith("/js/") or path.startswith("/media/"):
+    """Long cache for static media; JS revalidates so module graph stays fresh."""
+    if path.startswith("/js/"):
+        return "public, max-age=0, must-revalidate"
+    if path.startswith("/sfx/") or path.startswith("/media/"):
         return "public, max-age=86400"
     if path.endswith((".css", ".woff2", ".svg", ".png", ".ico", ".webp", ".mp3")):
         return "public, max-age=86400"
@@ -390,7 +413,7 @@ async def upload_beat(
             total += len(chunk)
             if total > MAX_BEAT_BYTES:
                 dest.unlink(missing_ok=True)
-                raise HTTPException(status_code=400, detail="File too large (max 15MB).")
+                raise HTTPException(status_code=400, detail="File too large (max 30MB).")
             out.write(chunk)
 
     if total == 0:
@@ -434,4 +457,13 @@ if _DATASET_ROOT.is_dir():
     )
 
 if FRONTEND_ROOT.is_dir():
+
+    @app.get("/")
+    async def _serve_index() -> HTMLResponse:
+        return _index_html_response()
+
+    @app.get("/index.html")
+    async def _serve_index_named() -> HTMLResponse:
+        return _index_html_response()
+
     app.mount("/", StaticFiles(directory=str(FRONTEND_ROOT), html=True), name="site")

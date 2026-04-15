@@ -1,5 +1,5 @@
 /**
- * ResultsScreen — winner, beat cards sorted by votes (grid of waveforms).
+ * Match over: winner up top, everyone else's beats in a grid.
  */
 import { authHeadersMultipart, fetchMe } from "../authApi.js";
 import { getApiBase } from "../apiOrigin.js";
@@ -12,7 +12,8 @@ import {
   mountMpChat,
   mpChatHandleErrorPayload,
 } from "../mpChat.js";
-import { notifyRematchWant } from "../mpPresenceToast.js";
+import { navigateToMenuAfterLobbyDissolved, notifyRematchWant } from "../mpPresenceToast.js";
+import { setRematchProgressHint } from "../mpMatchRoster.js";
 import { playSfxMinor } from "../sfx.js";
 import { supporterDisplayNameInnerHtml } from "../supporters.js";
 
@@ -63,7 +64,7 @@ export function mountResultsScreen(root, ctx) {
   mountAuthCornerLeave(ctx);
 
   const wsSock = ctx.mpWs;
-  /** True while we close the socket on purpose (avoid restart overlay). */
+  /** Intentional socket close — skip the "server restarting" overlay. */
   let teardownClose = false;
   const r = ctx.results || {};
   const winners = r.winners || [];
@@ -114,23 +115,23 @@ export function mountResultsScreen(root, ctx) {
         ? `<p class="arcade-hint results-beats-miss">Sign in required to replay beats.</p>`
         : "";
 
-  const rematchSection =
-    participants.length > 0 && wsSock instanceof WebSocket
-      ? `
-      <section class="results-rematch" aria-label="Rematch vote">
-        <p class="arcade-hint results-rematch-title">Rematch — all players must agree</p>
-        <ul class="results-rematch-list" id="results-rematch-list"></ul>
-        <button type="button" class="arcade-btn arcade-btn-secondary" id="results-rematch-btn">Rematch</button>
-      </section>
-    `
-      : "";
+  const showRematch = participants.length > 0 && wsSock instanceof WebSocket;
+  const resultsHeadRow = showRematch
+    ? `<div class="mp-panel-head results-panel-head" aria-label="Results and rematch">
+        <h2 class="arcade-heading mp-panel-head-title">RESULTS</h2>
+        <div class="mp-panel-head-timer" aria-hidden="true"></div>
+        <div class="mp-panel-head-roster results-rematch-roster-col">
+          <span id="results-rematch-hint" class="mp-progress-hint-wrap hidden" aria-live="polite"></span>
+          <button type="button" class="arcade-btn arcade-btn-secondary results-rematch-btn" id="results-rematch-btn">Rematch</button>
+        </div>
+      </div>`
+    : `<h2 class="arcade-heading results-title-standalone">RESULTS</h2>`;
 
   root.innerHTML = `
     <div class="screen results arcade-panel">
-      <h2 class="arcade-heading">RESULTS</h2>
+      ${resultsHeadRow}
       ${winnerBlock}
       ${beatsSection}
-      ${rematchSection}
       <button type="button" class="arcade-btn arcade-btn-primary" id="results-home">Main menu</button>
     </div>
   `;
@@ -139,39 +140,23 @@ export function mountResultsScreen(root, ctx) {
   const rematchVoted = new Set();
   let preserveWs = false;
 
-  const rematchListEl = root.querySelector("#results-rematch-list");
-  if (rematchListEl && participants.length > 0) {
-    for (const row of participants) {
-      const pid = String(row.player_id ?? "");
-      const name = String(row.name ?? pid);
-      const li = document.createElement("li");
-      li.className = "results-rematch-row";
-      li.dataset.playerId = pid;
-      const tick = document.createElement("span");
-      tick.className = "results-rematch-tick";
-      tick.setAttribute("aria-hidden", "true");
-      const nm = document.createElement("span");
-      nm.className = "results-rematch-name";
-      nm.innerHTML = supporterDisplayNameInnerHtml(name);
-      li.append(tick, nm);
-      rematchListEl.appendChild(li);
-    }
-  }
+  /** Current lobby members for rematch (player_id left → dropped here too). */
+  let rematchPlayers = participants.map((row) => ({
+    id: String(row.player_id ?? ""),
+    name: String(row.name ?? row.player_id ?? ""),
+  }));
 
-  const paintRematchTicks = () => {
-    if (!rematchListEl) return;
-    rematchListEl.querySelectorAll(".results-rematch-row").forEach((row) => {
-      const pid = row.dataset.playerId || "";
-      const tick = row.querySelector(".results-rematch-tick");
-      if (tick) tick.textContent = rematchVoted.has(pid) ? "✓" : "";
-    });
+  const syncRematchHint = () => {
+    setRematchProgressHint(root.querySelector("#results-rematch-hint"), rematchPlayers, rematchVoted);
     const btn = root.querySelector("#results-rematch-btn");
     if (btn instanceof HTMLButtonElement && playerId) {
       btn.disabled = rematchVoted.has(playerId);
     }
   };
 
-  paintRematchTicks();
+  if (showRematch) {
+    syncRematchHint();
+  }
 
   /** @type {{ destroy: () => void }[]} */
   const waveCleanups = [];
@@ -292,10 +277,21 @@ export function mountResultsScreen(root, ctx) {
       }
       ingestMpChatMessage(m);
       notifyRematchWant(m, playerId);
+      if (m.type === "player_leave" && m.player_id != null) {
+        const gone = String(m.player_id);
+        rematchPlayers = rematchPlayers.filter((p) => p.id !== gone);
+        rematchVoted.delete(gone);
+        syncRematchHint();
+      }
       if (m.type === "rematch_vote_update" && Array.isArray(m.voted_player_ids)) {
         rematchVoted.clear();
         for (const id of m.voted_player_ids) rematchVoted.add(String(id));
-        paintRematchTicks();
+        syncRematchHint();
+      }
+      if (m.type === "lobby_dissolved") {
+        preserveWs = true;
+        void navigateToMenuAfterLobbyDissolved(ctx, wsSock, m);
+        return;
       }
       if (m.type === "lobby_update" && m.lobby && m.lobby.state === "lobby") {
         preserveWs = true;

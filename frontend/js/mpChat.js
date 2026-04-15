@@ -1,5 +1,5 @@
 /**
- * Multiplayer session chat: shared log + fixed composer (ASCII text + quick emoji).
+ * MP chat: one scrollback, one input bar. ASCII only + a handful of emoji shortcuts.
  */
 import { escapeHtml } from "./rankUi.js";
 import { subscribeSupporterList, supporterDisplayNameInnerHtml } from "./supporters.js";
@@ -63,7 +63,7 @@ function pushSessionLine(line) {
   });
 }
 
-/** Wipe log when starting a new multiplayer session (e.g. join/create from matchmaking). */
+/** New queue / new lobby — flush the old messages. */
 export function clearMpChatSession() {
   sessionLog.length = 0;
   logSubscribers.forEach((fn) => {
@@ -76,7 +76,7 @@ export function clearMpChatSession() {
 }
 
 /**
- * Call from each screen WebSocket handler after parsing JSON.
+ * After you JSON.parse the WS payload — we only react to mp_chat here.
  * @param {any} m
  */
 export function ingestMpChatMessage(m) {
@@ -99,6 +99,7 @@ export function ingestMpChatMessage(m) {
 }
 
 /**
+ * Server said you're chatting too fast — sync the cooldown UI.
  * @param {any} m
  */
 export function mpChatHandleErrorPayload(m) {
@@ -130,6 +131,7 @@ function renderLogEl(logEl) {
 }
 
 /**
+ * Drop the chat UI on the screen; cleanup fn tears it down.
  * @param {{ ws: WebSocket, playerId: string, continueSession?: boolean }} opts
  * @returns {() => void}
  */

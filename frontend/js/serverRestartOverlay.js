@@ -1,5 +1,5 @@
 /**
- * Shown when the multiplayer WebSocket drops unexpectedly (e.g. server redeploy).
+ * WS died and we didn't mean it — usually a deploy or blip.
  */
 
 const OVERLAY_ID = "server-restart-overlay";

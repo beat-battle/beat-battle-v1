@@ -1,6 +1,6 @@
 /**
- * Cursor-following tooltips for any element with `data-corner-tooltip` (delegated).
- * Same UX as the corner social links.
+ * Hover tooltips that follow the cursor — anything with data-corner-tooltip (delegated).
+ * Same feel as the social links in the corner.
  */
 
 const OFFSET_X = 14;

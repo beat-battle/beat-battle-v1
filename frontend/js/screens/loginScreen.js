@@ -1,5 +1,5 @@
 /**
- * Login — username + password; JWT stored in localStorage.
+ * Log in — user/pass, JWT lives in localStorage like the rest of the app.
  */
 import { loginUser } from "../authApi.js";
 import { mountAuthCornerLoginGuest } from "../authCorner.js";

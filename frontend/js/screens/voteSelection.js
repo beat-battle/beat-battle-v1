@@ -1,5 +1,5 @@
 /**
- * VoteSelectionScreen — vote by clicking a beat preview (waveform); hover to preview audio.
+ * Pick a winner — click a card to vote, hover to hear a snippet.
  */
 import { authHeadersMultipart } from "../authApi.js";
 import { getApiBase } from "../apiOrigin.js";
@@ -13,7 +13,16 @@ import {
 import { mountAuthCornerLeave } from "../authCorner.js";
 import { supporterDisplayNameInnerHtml } from "../supporters.js";
 import { ingestMpChatMessage, mountMpChat, mpChatHandleErrorPayload } from "../mpChat.js";
-import { pollMatchSync } from "../mpMatchSync.js";
+import {
+  applyMatchWsToLobby,
+  lobbyLikeFromMatchSync,
+  normalizeLobbyLike,
+  phaseTimerRowHtml,
+  progressHintSlotHtml,
+  syncMatchProgressHint,
+  updatePhaseTimerBar,
+} from "../mpMatchRoster.js";
+import { fetchMatchSync, pollMatchSync } from "../mpMatchSync.js";
 import { playSfxMajor } from "../sfx.js";
 import { mountResultsScreen } from "./results.js";
 
@@ -24,7 +33,7 @@ function getWaveSurfer() {
 }
 
 /**
- * Hover-only preview (click on card votes, not full replay).
+ * Hover = preview; the card click is the actual vote (not a full replay).
  * @param {HTMLElement} waveWrap
  * @param {HTMLAudioElement} audio
  */
@@ -48,6 +57,9 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
+/** If server omits `votes_close_at` (matches backend `VOTING_COLLECT_S`). */
+const VOTE_COLLECT_FALLBACK_S = 30;
+
 export function mountVoteSelectionScreen(root, ctx) {
   mountAuthCornerLeave(ctx);
 
@@ -55,13 +67,31 @@ export function mountVoteSelectionScreen(root, ctx) {
   const playerId = ctx.playerId ? String(ctx.playerId) : "";
   const lobbyId = ctx.lobbyId;
   const beats = ctx.beats || [];
-  const unlock = ctx.votesUnlockAt ?? 0;
+  /** Server wall-clock when voting opens globally (may move earlier when everyone finishes the slideshow). */
+  let unlockAt =
+    typeof ctx.votesUnlockWall === "number" && Number.isFinite(ctx.votesUnlockWall)
+      ? ctx.votesUnlockWall
+      : typeof ctx.votesUnlockAt === "number" && Number.isFinite(ctx.votesUnlockAt)
+        ? ctx.votesUnlockAt
+        : 0;
+  let votesCloseAt =
+    typeof ctx.votesCloseAt === "number" && Number.isFinite(ctx.votesCloseAt)
+      ? ctx.votesCloseAt
+      : unlockAt > 0
+        ? unlockAt + VOTE_COLLECT_FALLBACK_S
+        : null;
+  /** Local user finished the slideshow (matches server ``slideshow_completed``). */
+  let slideshowDone = ctx.slideshowCompleted === true;
+  /** True after ``renderVote`` has run. */
+  let voteUiShown = false;
   const apiBase = typeof ctx.apiBase === "string" ? ctx.apiBase : getApiBase();
   let preserveWs = false;
   let resultsPollNav = false;
-  /** True while unmount closes the socket on purpose (avoid restart overlay). */
+  /** Intentional socket close — skip the "server restarting" overlay. */
   let teardownClose = false;
   let unlockInterval = 0;
+  /** Countdown while vote cards are active. */
+  let voteDeadlineInterval = 0;
   let voteUiLocked = false;
 
   /** @type {{ destroy: () => void }[]} */
@@ -95,9 +125,56 @@ export function mountVoteSelectionScreen(root, ctx) {
       ? mountMpChat({ ws: wsSock, playerId, continueSession: true })
       : () => {};
 
+  /** @type {ReturnType<typeof normalizeLobbyLike>} */
+  let lobbyView = normalizeLobbyLike({});
+  const syncProgressHint = () => syncMatchProgressHint(root, "mp-corner-vote", "vote", lobbyView);
+
+  const applyVoteTimingFromSync = (sync) => {
+    if (!sync || String(sync.match_state) !== "voting") return;
+    const vu = sync.votes_unlock_at;
+    if (typeof vu === "number" && Number.isFinite(vu)) unlockAt = vu;
+    const vc = sync.votes_close_at;
+    if (typeof vc === "number" && Number.isFinite(vc)) votesCloseAt = vc;
+    const done = sync.slideshow_completed;
+    if (Array.isArray(done) && playerId && done.some((id) => String(id) === playerId)) {
+      slideshowDone = true;
+    }
+  };
+
+  const maybeShowVote = () => {
+    if (voteUiShown) return;
+    const now = Date.now() / 1000;
+    if (now >= unlockAt || slideshowDone) {
+      voteUiShown = true;
+      renderVote();
+    }
+  };
+
+  void (async () => {
+    const sync = await fetchMatchSync(String(lobbyId));
+    applyVoteTimingFromSync(sync);
+    const L = lobbyLikeFromMatchSync(sync);
+    if (L && Array.isArray(L.players) && L.players.length) {
+      lobbyView = normalizeLobbyLike(L);
+      syncProgressHint();
+    }
+    maybeShowVote();
+  })();
+
   const stopResultsPoll = pollMatchSync(
     String(lobbyId),
     (sync) => {
+      if (!resultsPollNav && !preserveWs) {
+        const L = lobbyLikeFromMatchSync(sync);
+        if (L && Array.isArray(L.players) && L.players.length) {
+          lobbyView = normalizeLobbyLike(L);
+          syncProgressHint();
+        }
+      }
+      if (String(sync.match_state) === "voting") {
+        applyVoteTimingFromSync(sync);
+        maybeShowVote();
+      }
       if (resultsPollNav || preserveWs) return;
       if (String(sync.match_state) !== "results" || !sync.results || typeof sync.results !== "object") {
         return;
@@ -123,48 +200,107 @@ export function mountVoteSelectionScreen(root, ctx) {
 
   const renderLocked = () => {
     teardownBeatWaveforms();
+    if (voteDeadlineInterval) {
+      clearInterval(voteDeadlineInterval);
+      voteDeadlineInterval = 0;
+    }
+    const lockPhaseStart = Date.now() / 1000;
+    const unlockTotalSec = Math.max(1, unlockAt - lockPhaseStart);
     root.innerHTML = `
       <div class="screen vote arcade-panel">
-        <h2 class="arcade-heading">VOTE</h2>
-        <p class="arcade-hint">Votes unlock after the slideshow finishes…</p>
+        <div class="mp-panel-head">
+          <h2 class="arcade-heading mp-panel-head-title">VOTE!</h2>
+          <div class="mp-panel-head-timer">${phaseTimerRowHtml("mp-vote-unlock-phase")}</div>
+          <div class="mp-panel-head-roster">${progressHintSlotHtml("mp-corner-vote")}</div>
+        </div>
+        <p class="arcade-hint">Waiting for everyone to finish the slideshow…</p>
       </div>
     `;
+    syncProgressHint();
+    const tickUnlock = () => {
+      const remain = unlockAt - Date.now() / 1000;
+      updatePhaseTimerBar(root, "mp-vote-unlock-phase", unlockTotalSec, Math.max(0, remain));
+      if (remain <= 0 || slideshowDone) {
+        if (unlockInterval) clearInterval(unlockInterval);
+        unlockInterval = 0;
+        voteUiShown = true;
+        renderVote();
+      }
+    };
+    tickUnlock();
+    unlockInterval = window.setInterval(tickUnlock, 400);
   };
 
   const renderVote = () => {
+    voteUiShown = true;
     if (unlockInterval) {
       clearInterval(unlockInterval);
       unlockInterval = 0;
     }
+    if (voteDeadlineInterval) {
+      clearInterval(voteDeadlineInterval);
+      voteDeadlineInterval = 0;
+    }
     teardownBeatWaveforms();
     voteUiLocked = false;
+
+    const timerRowHtml =
+      votesCloseAt != null ? `<div aria-live="polite">${phaseTimerRowHtml("mp-vote-deadline-phase")}</div>` : "";
+
+    const startDeadlineTick = () => {
+      if (votesCloseAt == null) return;
+      const tickDeadline = () => {
+        const now = Date.now() / 1000;
+        const windowS =
+          unlockAt > 0 && votesCloseAt > unlockAt ? votesCloseAt - unlockAt : VOTE_COLLECT_FALLBACK_S;
+        const remainInVoteWindow = Math.max(0, votesCloseAt - now);
+        updatePhaseTimerBar(root, "mp-vote-deadline-phase", Math.max(1, windowS), remainInVoteWindow);
+      };
+      voteDeadlineInterval = window.setInterval(tickDeadline, 250);
+      tickDeadline();
+    };
 
     if (targets.length === 0) {
       root.innerHTML = `
         <div class="screen vote arcade-panel">
-          <h2 class="arcade-heading">VOTE</h2>
+          <div class="mp-panel-head">
+            <h2 class="arcade-heading mp-panel-head-title">VOTE</h2>
+            <div class="mp-panel-head-timer">${timerRowHtml}</div>
+            <div class="mp-panel-head-roster">${progressHintSlotHtml("mp-corner-vote")}</div>
+          </div>
           <p class="arcade-hint">No other beats to vote for.</p>
         </div>
       `;
+      syncProgressHint();
+      startDeadlineTick();
       return;
     }
 
     root.innerHTML = `
       <div class="screen vote arcade-panel">
-        <h2 class="arcade-heading">Vote for the best beat</h2>
+        <div class="mp-panel-head">
+          <h2 class="arcade-heading mp-panel-head-title">Vote!</h2>
+          <div class="mp-panel-head-timer">${timerRowHtml}</div>
+          <div class="mp-panel-head-roster">${progressHintSlotHtml("mp-corner-vote")}</div>
+        </div>
         <p class="arcade-hint vote-beat-hint">Hover waveform to preview · click card to vote · not your track</p>
         <div class="grid vote-beat-grid" id="vote-beat-grid"></div>
         <p class="arcade-error" id="vote-err"></p>
       </div>
     `;
+    syncProgressHint();
 
     const gridEl = root.querySelector("#vote-beat-grid");
-    if (!gridEl) return;
+    if (!gridEl) {
+      startDeadlineTick();
+      return;
+    }
     if (!playerId) {
       const miss = document.createElement("p");
       miss.className = "arcade-hint";
       miss.textContent = "Sign in required to load beats for voting.";
       gridEl.replaceWith(miss);
+      startDeadlineTick();
       return;
     }
 
@@ -258,20 +394,8 @@ export function mountVoteSelectionScreen(root, ctx) {
         }
       })();
     });
+    startDeadlineTick();
   };
-
-  if (Date.now() / 1000 >= unlock) {
-    renderVote();
-  } else {
-    renderLocked();
-    unlockInterval = window.setInterval(() => {
-      if (Date.now() / 1000 >= unlock) {
-        clearInterval(unlockInterval);
-        unlockInterval = 0;
-        renderVote();
-      }
-    }, 400);
-  }
 
   const onMessage = (ev) => {
     let m;
@@ -301,6 +425,26 @@ export function mountVoteSelectionScreen(root, ctx) {
       preserveWs = true;
       stopResultsPoll();
       ctx.navigate(mountResultsScreen, { mpWs: wsSock, results: m, playerId });
+      return;
+    }
+    if (m.type === "votes_timing" && String(m.lobby_id) === String(lobbyId)) {
+      if (typeof m.votes_unlock_at === "number" && Number.isFinite(m.votes_unlock_at)) {
+        unlockAt = m.votes_unlock_at;
+      }
+      if (typeof m.votes_close_at === "number" && Number.isFinite(m.votes_close_at)) {
+        votesCloseAt = m.votes_close_at;
+      }
+      maybeShowVote();
+      return;
+    }
+    if (
+      m.type === "lobby_update" ||
+      m.type === "cook_finished_update" ||
+      m.type === "beat_uploaded" ||
+      m.type === "vote_cast"
+    ) {
+      lobbyView = applyMatchWsToLobby(lobbyView, m);
+      syncProgressHint();
     }
   };
   wsSock.onclose = () => {
@@ -309,10 +453,18 @@ export function mountVoteSelectionScreen(root, ctx) {
   };
   wsSock.onmessage = onMessage;
 
+  if (Date.now() / 1000 >= unlockAt || slideshowDone) {
+    voteUiShown = true;
+    renderVote();
+  } else {
+    renderLocked();
+  }
+
   return () => {
     stopResultsPoll();
     unmountMpChat();
     if (unlockInterval) clearInterval(unlockInterval);
+    if (voteDeadlineInterval) clearInterval(voteDeadlineInterval);
     teardownBeatWaveforms();
     teardownClose = true;
     root.innerHTML = "";

@@ -1,5 +1,5 @@
 /**
- * Solo Cook — client-side light kit (manifest + dataset), same path as multiplayer.
+ * Solo mode: same light-kit path as MP — manifest + pulls from /media/dataset.
  */
 import { mountAuthCornerLeave } from "./authCorner.js";
 import { getApiBase } from "./apiOrigin.js";

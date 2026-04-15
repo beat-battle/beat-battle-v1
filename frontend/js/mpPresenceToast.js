@@ -1,5 +1,5 @@
 /**
- * Multiplayer player join/leave — top-center toasts, slide from top.
+ * Someone joined or left — little toast drops from the top.
  */
 import { clearMpChatSession } from "./mpChat.js";
 import { playSfxPlayerJoin, playSfxPlayerLeave, playSfxSoloMatchAlarm } from "./sfx.js";
@@ -29,7 +29,9 @@ function show(kind, label) {
       ? "mp-presence-toast mp-presence-toast--join"
       : kind === "leave"
         ? "mp-presence-toast mp-presence-toast--leave"
-        : "mp-presence-toast mp-presence-toast--rematch";
+        : kind === "kick"
+          ? "mp-presence-toast mp-presence-toast--kick"
+          : "mp-presence-toast mp-presence-toast--rematch";
   card.setAttribute("role", "status");
   const text = document.createElement("span");
   text.className = "mp-presence-toast-text";
@@ -75,6 +77,11 @@ export function notifyMpPlayerLeave(m, selfId) {
  * @param {unknown} m — WS message
  * @param {string} selfId
  */
+/** You were removed by the host — short toast, then client closes WS. */
+export function showKickedFromMatchToast() {
+  show("kick", "You were kicked from the match");
+}
+
 export function notifyRematchWant(m, selfId) {
   if (!m || m.type !== "rematch_vote_update") return;
   const id = String(m.voter_id ?? "");

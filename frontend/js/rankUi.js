@@ -1,5 +1,5 @@
 /**
- * Rank display helpers and session keys for rank-up flow.
+ * Rank badge HTML + sessionStorage keys for rank-up popups.
  */
 
 export const RANK_BASELINE_KEY = "cookup_match_rank_index";
@@ -13,7 +13,7 @@ export function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-/** Inline next to username; `rank` from API or lobby player. */
+/** Small tag next to a name — rank comes from /me or lobby payload. */
 export function rankBadgeHtml(rank) {
   if (!rank || !rank.abbrev) return "";
   const c = String(rank.color || "#fff").replace(/[<>'"]/g, "");

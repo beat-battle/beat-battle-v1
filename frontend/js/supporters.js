@@ -1,5 +1,5 @@
 /**
- * Supporter display names: loaded from GET /api/supporters with static fallback.
+ * Who gets a heart — live list from /api/supporters, hardcoded fallback if that fails.
  */
 import { getApiBase } from "./apiOrigin.js";
 import { escapeHtml } from "./rankUi.js";
@@ -70,7 +70,7 @@ export async function refreshSupportersFromApi() {
   }
 }
 
-/** Boot + periodic refetch (guests and logged-in). */
+/** Pull once on load, then every so often — works for guests too. */
 export function initSupportersClient() {
   void refreshSupportersFromApi();
   if (pollId != null) return;
@@ -97,7 +97,7 @@ function escapeAttr(s) {
 }
 
 /**
- * Safe HTML for a single visible display name (heart + tooltip wrapper when supporter).
+ * Name + optional heart + tooltip if they're on the supporter list.
  * @param {unknown} rawDisplayName
  */
 export function supporterDisplayNameInnerHtml(rawDisplayName) {
@@ -109,7 +109,7 @@ export function supporterDisplayNameInnerHtml(rawDisplayName) {
 }
 
 /**
- * For plain-text contexts (toasts): prefix with heart when supporter.
+ * Toasts can't do HTML so slap a heart prefix when they're a supporter.
  * @param {unknown} rawDisplayName
  */
 export function supporterPlainPrefix(rawDisplayName) {

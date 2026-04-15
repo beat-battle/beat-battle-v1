@@ -1,5 +1,5 @@
 /**
- * Multiplayer hub — create, browse, or join by code.
+ * MP home: host a game, browse the list, or type a code.
  */
 import { getUsername, isLoggedIn, validateSession } from "../authApi.js";
 import { mountAuthCornerLeave } from "../authCorner.js";

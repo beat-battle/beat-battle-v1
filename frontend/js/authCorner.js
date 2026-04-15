@@ -1,5 +1,5 @@
 /**
- * Fixed top-right account card + auth actions (cleared on each navigate from main.js).
+ * Top-right account bubble — main.js wipes it on every screen change.
  */
 import { clearAuthSession, fetchMe } from "./authApi.js";
 import { rankBadgeHtml } from "./rankUi.js";
@@ -28,7 +28,7 @@ export function clearAuthCorner() {
 }
 
 /**
- * Logged-in menu: profile card + Leaderboard or Home + Logout.
+ * Signed in: avatar-ish card + LB or Home + logout.
  * @param {{ navigate: function }} ctx
  * @param {{ primary?: 'leaderboard' | 'home' }} [opts]
  */
@@ -87,7 +87,7 @@ export function mountAuthCornerMenu(ctx, opts = {}) {
 }
 
 /**
- * Not logged in: compact actions (Leaderboard / Home + Login + Register).
+ * Guest: LB or Home + login + register.
  * @param {{ navigate: function }} ctx
  * @param {{ showHome?: boolean }} [opts] — true on leaderboard screen (Home → menu)
  */
@@ -129,7 +129,7 @@ export function mountAuthCornerGuest(ctx, opts = {}) {
   });
 }
 
-/** Login screen: Home + Register in corner. */
+/** On login: Home + Register shortcuts. */
 export function mountAuthCornerLoginGuest(ctx) {
   const el = ensureCornerEl();
   el.innerHTML = `
@@ -150,7 +150,7 @@ export function mountAuthCornerLoginGuest(ctx) {
   });
 }
 
-/** Register screen: Home + Login in corner. */
+/** On register: Home + Login shortcuts. */
 export function mountAuthCornerRegisterGuest(ctx) {
   const el = ensureCornerEl();
   el.innerHTML = `
@@ -171,7 +171,7 @@ export function mountAuthCornerRegisterGuest(ctx) {
   });
 }
 
-/** In-game: Leave → main menu (unmount cleans WebSocket / audio). */
+/** In a match: single Leave — screen unmount tears down WS/audio. */
 export function mountAuthCornerLeave(ctx) {
   const el = ensureCornerEl();
   el.innerHTML = `
