@@ -145,7 +145,7 @@ def _static_cache_control(path: str) -> str | None:
         return "public, max-age=0, must-revalidate"
     if path.startswith("/sfx/") or path.startswith("/media/"):
         return "public, max-age=86400"
-    if path.endswith((".css", ".woff2", ".svg", ".png", ".ico", ".webp", ".mp3")):
+    if path.endswith((".css", ".woff2", ".svg", ".png", ".ico", ".webp", ".mp3", ".ogg")):
         return "public, max-age=86400"
     if path == "/" or path.endswith(".html"):
         return "no-cache"
@@ -200,7 +200,7 @@ def _solo_generate_sync(seed: int, spice: float) -> dict[str, Any]:
 
 @app.post("/generate")
 async def post_generate(body: GenerateRequest) -> dict[str, Any]:
-    """Solo: synthesize a kit, return base64 MP3 (dataset files as stored)."""
+    """Solo: synthesize a kit, return base64 OGG (dataset files as stored)."""
     seed = body.seed if body.seed is not None else random.randint(0, 2**31 - 1)
     return await asyncio.to_thread(_solo_generate_sync, seed, body.spice)
 

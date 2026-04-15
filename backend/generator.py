@@ -61,14 +61,21 @@ CATEGORY_FOLDERS: dict[str, str] = {
 
 
 def _dataset_dir(logical: str) -> Path:
-    """Resolve dataset folder. Open hats live in ``openhats/``; ``open_hihats/`` is only a fallback."""
+    """Resolve ``dataset/trap/<category>/``. Open hats: ``openhats``; ``open_hihats`` fallback."""
     name = CATEGORY_FOLDERS[logical]
-    p = DATASET_ROOT / name
+    trap = DATASET_ROOT / "trap"
+    p = trap / name
     if p.is_dir():
         return p
-    if logical == "open_hat" and (DATASET_ROOT / "open_hihats").is_dir():
-        return DATASET_ROOT / "open_hihats"
+    if logical == "open_hat" and (trap / "open_hihats").is_dir():
+        return trap / "open_hihats"
     return p
+
+
+def trap_synth_samples_dir() -> Path:
+    """Shared pool for synth1/2/3 — same folder as CDN ``trap/synths/*.ogg``."""
+    return DATASET_ROOT / "trap" / "synths"
+
 
 EXPECTED_KIT_WAVS = frozenset(
     {
@@ -87,21 +94,21 @@ EXPECTED_KIT_WAVS = frozenset(
     }
 )
 
-# Light kit: copies dataset MP3s (web / solo API).
-EXPECTED_KIT_MP3 = frozenset(
+# Light kit: copies dataset OGGs (web / solo API).
+EXPECTED_KIT_OGG = frozenset(
     {
-        "snare.mp3",
-        "clap.mp3",
-        "hihat.mp3",
-        "open_hat.mp3",
-        "808.mp3",
-        "perc.mp3",
-        "fx.mp3",
-        "vox.mp3",
-        "synth1.mp3",
-        "synth2.mp3",
-        "synth3.mp3",
-        "kick.mp3",
+        "snare.ogg",
+        "clap.ogg",
+        "hihat.ogg",
+        "open_hat.ogg",
+        "808.ogg",
+        "perc.ogg",
+        "fx.ogg",
+        "vox.ogg",
+        "synth1.ogg",
+        "synth2.ogg",
+        "synth3.ogg",
+        "kick.ogg",
     }
 )
 
@@ -377,7 +384,7 @@ def _generate_with_retries(
     d = _dataset_dir(logical)
     sources = list_category_wavs(d)
     if not sources:
-        raise ValueError(f"No .mp3 files in {d}.")
+        raise ValueError(f"No .ogg files in {d}.")
 
     # If one source fails MAX_GENERATION_ATTEMPTS, switch source and try again.
     start = int(base_rng.integers(0, len(sources)))
@@ -416,8 +423,8 @@ def _cleanup_stale_outputs(out_dir: Path) -> None:
     for p in out_dir.glob("*.wav"):
         if p.name not in EXPECTED_KIT_WAVS:
             p.unlink(missing_ok=True)
-    for p in out_dir.glob("*.mp3"):
-        if p.name not in EXPECTED_KIT_MP3:
+    for p in out_dir.glob("*.ogg"):
+        if p.name not in EXPECTED_KIT_OGG:
             p.unlink(missing_ok=True)
 
 
@@ -463,7 +470,7 @@ def generate_kit(
         out[logical] = path.resolve()
 
     # --- Synths ---
-    synth_dir = DATASET_ROOT / "synths"
+    synth_dir = trap_synth_samples_dir()
     if not synth_dir.is_dir():
         raise FileNotFoundError(f"Category folder not found: {synth_dir}")
 
@@ -542,14 +549,14 @@ def generate_light_stem(
     seed: int, slot_index: int, logical: str, out_dir: Path, spice: float = 0.3
 ) -> Path:
     """
-    Pick one deterministic dataset ``.mp3`` for the slot (portable RNG + ``spice``) and copy as-is.
+    Pick one deterministic dataset ``.ogg`` for the slot (portable RNG + ``spice``) and copy as-is.
     """
     s = float(np.clip(spice, 0.0, 1.0))
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if logical.startswith("synth"):
-        synth_dir = DATASET_ROOT / "synths"
+        synth_dir = trap_synth_samples_dir()
         if not synth_dir.is_dir():
             raise FileNotFoundError(f"Category folder not found: {synth_dir}")
         samples = list_dataset_samples_in_dir(synth_dir)
@@ -559,7 +566,7 @@ def generate_light_stem(
         wavs = list_category_wavs(d)
         path_pick = wavs[pick_index(seed, slot_index, s, len(wavs))]
 
-    dest = out_dir / f"{logical}.mp3"
+    dest = out_dir / f"{logical}.ogg"
     shutil.copy2(path_pick, dest)
     return dest.resolve()
 
@@ -570,7 +577,7 @@ def generate_kit_light(
     output_dir: Path | None = None,
 ) -> dict[str, Path]:
     """
-    Build a full kit by copying dataset ``.mp3`` samples only (no DSP chain).
+    Build a full kit by copying dataset ``.ogg`` samples only (no DSP chain).
     ``spice`` feeds :func:`pick_index` so kit selection varies with heat level.
     """
     s = float(np.clip(spice, 0.0, 1.0))

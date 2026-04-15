@@ -5,8 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="cookup-api" content="" />
   <meta name="beat-battle-api" content="" />
+  <meta name="beat-battle-cdn" content="https://assets.beat-battle.net" />
   <title>Beat Battle</title>
-  <link rel="preload" href="/sfx/BeatBattle.mp3?v=__STATIC_BUILD__" as="audio" type="audio/mpeg" />
+  <script>
+    (function () {
+      var m = document.querySelector('meta[name="beat-battle-cdn"]');
+      var b = (m && m.getAttribute("content") || "").trim().replace(/\/+$/, "");
+      var h = b ? b + "/sfx/BeatBattle.mp3" : "/sfx/BeatBattle.mp3";
+      var l = document.createElement("link");
+      l.rel = "preload";
+      l.href = h + "?v=__STATIC_BUILD__";
+      l.as = "audio";
+      l.type = "audio/mpeg";
+      document.head.appendChild(l);
+    })();
+  </script>
   <link rel="stylesheet" href="style.css?v=__STATIC_BUILD__" />
   <script src="https://cdn.jsdelivr.net/npm/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>

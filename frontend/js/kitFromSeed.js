@@ -2,7 +2,9 @@
  * Build the same kit the server would — pick_index + paths from /api/kit-manifest.
  */
 
-const MANIFEST_STORAGE_KEY = "bb_kit_manifest_v4";
+import { getCdnBase } from "./apiOrigin.js";
+
+const MANIFEST_STORAGE_KEY = "bb_kit_manifest_v6";
 const TARGET_RATE = 44100;
 
 export const KIT_SOUND_KEYS = [
@@ -24,8 +26,8 @@ export const SYNTH_KEYS = ["synth1", "synth2", "synth3"];
 
 export const DRUM_KEYS = KIT_SOUND_KEYS.filter((k) => !k.startsWith("synth"));
 
-/** Stems on disk are mp3; zips use this too. */
-export const KIT_SOUND_FILE_EXT = "mp3";
+/** Dataset stems are OGG (CDN or /media/dataset); zips use this extension. */
+export const KIT_SOUND_FILE_EXT = "ogg";
 
 function float32Bits(x) {
   const buf = new ArrayBuffer(4);
@@ -59,6 +61,20 @@ export function pickIndex(seed, slotIndex, spice, n) {
  * @param {string} apiBase
  * @returns {Promise<{ version?: number; sampleRate?: number; keys: Record<string, string[]> }>}
  */
+function isValidManifestShape(data) {
+  return (
+    data &&
+    typeof data === "object" &&
+    typeof data.keys === "object" &&
+    data.keys != null &&
+    Array.isArray(data.keys.snare) &&
+    Array.isArray(data.keys.synth1)
+  );
+}
+
+/**
+ * Kit manifest: try CDN ``/kit-manifest.json`` when ``beat-battle-cdn`` is set, else ``GET /api/kit-manifest``.
+ */
 export async function fetchKitManifest(apiBase) {
   try {
     const raw = sessionStorage.getItem(MANIFEST_STORAGE_KEY);
@@ -66,7 +82,26 @@ export async function fetchKitManifest(apiBase) {
   } catch {
     /* ignore */
   }
-  const base = apiBase.replace(/\/$/, "");
+  const cdn = getCdnBase().replace(/\/+$/, "");
+  if (cdn) {
+    try {
+      const cdnRes = await fetch(`${cdn}/kit-manifest.json`, { cache: "no-store" });
+      if (cdnRes.ok) {
+        const data = await cdnRes.json();
+        if (isValidManifestShape(data)) {
+          try {
+            sessionStorage.setItem(MANIFEST_STORAGE_KEY, JSON.stringify(data));
+          } catch {
+            /* ignore */
+          }
+          return data;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  const base = apiBase.replace(/\/+$/, "");
   const res = await fetch(`${base}/api/kit-manifest`);
   if (!res.ok) throw new Error(`kit-manifest: ${res.status}`);
   const data = await res.json();
@@ -78,12 +113,24 @@ export async function fetchKitManifest(apiBase) {
   return data;
 }
 
-function mediaUrl(apiBase, relPath) {
-  const base = apiBase.replace(/\/$/, "");
-  const enc = relPath
+function encodedDatasetPath(relPath) {
+  const rel = String(relPath || "").replace(/^\/+/, "");
+  if (!rel) return "";
+  return rel
     .split("/")
     .map((p) => encodeURIComponent(p))
     .join("/");
+}
+
+/**
+ * Dataset file URL: CDN when `beat-battle-cdn` meta (or storage) set, else same-origin `/media/dataset/`.
+ * Manifest paths are like ``trap/synths/3D_CHORD.ogg`` → ``https://assets.beat-battle.net/trap/synths/3D_CHORD.ogg``.
+ */
+export function datasetMediaUrl(apiBase, relPath) {
+  const enc = encodedDatasetPath(relPath);
+  const cdn = getCdnBase().replace(/\/+$/, "");
+  if (cdn && enc) return `${cdn}/${enc}`;
+  const base = apiBase.replace(/\/+$/, "");
   return `${base}/media/dataset/${enc}`;
 }
 
@@ -104,10 +151,10 @@ function arrayBufferToBase64(buffer) {
 /**
  * @param {string} apiBase
  * @param {string} relPath
- * @returns {Promise<string>} base64 MP3 (dataset file bytes)
+ * @returns {Promise<string>} base64 OGG (dataset file bytes)
  */
-async function fetchMediaMp3Base64(apiBase, relPath) {
-  const res = await fetch(mediaUrl(apiBase, relPath));
+async function fetchMediaKitBase64(apiBase, relPath) {
+  const res = await fetch(datasetMediaUrl(apiBase, relPath));
   if (!res.ok) throw new Error(`fetch ${relPath}: ${res.status}`);
   const arr = await res.arrayBuffer();
   return arrayBufferToBase64(arr);
@@ -136,7 +183,7 @@ export async function resampleTo44100(audioBuffer) {
  * @returns {Promise<AudioBuffer>}
  */
 export async function fetchDecodeResample(audioContext, apiBase, relPath) {
-  const res = await fetch(mediaUrl(apiBase, relPath));
+  const res = await fetch(datasetMediaUrl(apiBase, relPath));
   if (!res.ok) throw new Error(`fetch ${relPath}: ${res.status}`);
   const arr = await res.arrayBuffer();
   const decoded = await audioContext.decodeAudioData(arr.slice(0));
@@ -148,7 +195,7 @@ function writeStr(view, offset, s) {
 }
 
 /**
- * Old WAV helper — kits ship as MP3 now but this still shows up in a few places.
+ * Old WAV helper — kits use OGG on the wire; this still shows up in a few places.
  * @param {AudioBuffer} buffer
  * @returns {string} base64 WAV
  */
@@ -219,7 +266,7 @@ export async function loadSynthBuffersAndMp3Base64Parallel({
       if (!paths?.length) throw new Error(`No samples for ${key}`);
       const idx = pickIndex(seed, slot, spice, paths.length);
       const relPath = paths[idx];
-      const res = await fetch(mediaUrl(apiBase, relPath));
+      const res = await fetch(datasetMediaUrl(apiBase, relPath));
       if (!res.ok) throw new Error(`fetch ${relPath}: ${res.status}`);
       const arr = await res.arrayBuffer();
       base64[key] = arrayBufferToBase64(arr);
@@ -270,7 +317,7 @@ export async function loadDrumKitBase64Parallel({
       const paths = keysObj[key];
       if (!paths?.length) throw new Error(`No samples for ${key}`);
       const idx = pickIndex(seed, slot, spice, paths.length);
-      const b64 = await fetchMediaMp3Base64(apiBase, paths[idx]);
+      const b64 = await fetchMediaKitBase64(apiBase, paths[idx]);
       done += 1;
       onProgress?.({ key, step: done, total });
       return [key, b64];
@@ -297,7 +344,7 @@ export async function buildKitFromSeed({ seed, spice, apiBase, onProgress }) {
     const paths = keysObj[key];
     if (!paths?.length) throw new Error(`No samples for ${key}`);
     const idx = pickIndex(seed, i, spice, paths.length);
-    out[key] = await fetchMediaMp3Base64(apiBase, paths[idx]);
+    out[key] = await fetchMediaKitBase64(apiBase, paths[idx]);
     onProgress?.({ key, step: i + 1, total: n });
   }
   return out;

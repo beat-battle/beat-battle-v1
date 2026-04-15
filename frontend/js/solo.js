@@ -30,7 +30,7 @@ const SOUND_KEYS = [
 ];
 
 function base64ToAudioSrc(base64) {
-  return "data:audio/mpeg;base64," + base64;
+  return "data:audio/ogg;base64," + base64;
 }
 
 function labelForKey(key) {
@@ -303,7 +303,7 @@ export function mountSoloScreen(root, ctx) {
     if (!lastSoundsB64) return;
     const b64 = lastSoundsB64[key];
     if (!b64) return;
-    const blob = new Blob([base64ToBytes(b64)], { type: "audio/mpeg" });
+    const blob = new Blob([base64ToBytes(b64)], { type: "audio/ogg" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

@@ -3,3 +3,7 @@ uploads/
 __pycache__/
 *.pyc
 .env
+
+# Local tooling, ML weights, scratch outputs — not for GitHub or Render
+misc/
+.pytest_cache/

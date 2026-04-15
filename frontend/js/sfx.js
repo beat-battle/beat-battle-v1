@@ -1,15 +1,23 @@
 /**
- * Little UI bleeps. Audio files sit in ../sfx/ next to this file.
+ * Little UI bleeps. Local: ../sfx/; production: CDN base + /sfx/ (see meta beat-battle-cdn).
  */
+import { getCdnBase } from "./apiOrigin.js";
+
 const dir = new URL("../sfx/", import.meta.url);
 
 /** @type {Map<string, HTMLAudioElement>} */
 const audioCache = new Map();
 
+function sfxHref(filename) {
+  const cdn = getCdnBase().replace(/\/+$/, "");
+  if (cdn) return `${cdn}/sfx/${filename}`;
+  return new URL(filename, dir).href;
+}
+
 function audioFor(filename) {
   let a = audioCache.get(filename);
   if (!a) {
-    a = new Audio(new URL(filename, dir).href);
+    a = new Audio(sfxHref(filename));
     a.preload = "auto";
     audioCache.set(filename, a);
   }

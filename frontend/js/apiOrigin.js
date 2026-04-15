@@ -8,12 +8,32 @@ function readMetaApiBase() {
     document.querySelector('meta[name="cookup-api"]') ||
     document.querySelector('meta[name="beat-battle-api"]');
   const c = el?.getAttribute("content")?.trim();
-  return c && c.length > 0 ? c.replace(/\/$/, "") : "";
+  return c && c.length > 0 ? c.replace(/\/+$/, "") : "";
+}
+
+function readMetaCdnBase() {
+  const el = document.querySelector('meta[name="beat-battle-cdn"]');
+  const c = el?.getAttribute("content")?.trim();
+  return c && c.length > 0 ? c.replace(/\/+$/, "") : "";
+}
+
+/**
+ * Public asset host (R2 custom domain). Empty → dataset + SFX load from API origin paths.
+ * Override: sessionStorage.setItem("beatBattleCdnBase", "https://assets.example.com"); reload.
+ */
+export function getCdnBase() {
+  try {
+    const fromStorage = sessionStorage.getItem("beatBattleCdnBase")?.trim();
+    if (fromStorage) return fromStorage.replace(/\/+$/, "");
+  } catch {
+    /* ignore */
+  }
+  return readMetaCdnBase();
 }
 
 export function getApiBase() {
   const fromStorage = sessionStorage.getItem("beatBattleApiBase")?.trim();
-  if (fromStorage) return fromStorage.replace(/\/$/, "");
+  if (fromStorage) return fromStorage.replace(/\/+$/, "");
   if (window.location.port === "8000") {
     return window.location.origin;
   }

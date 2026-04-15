@@ -30,7 +30,7 @@ SAMPLE_RATE = 44100
 
 def list_dataset_samples_in_dir(d: Path) -> list[Path]:
     """
-    List ``.mp3`` samples in ``d`` (dataset media for the browser is MP3-only).
+    List ``.ogg`` samples in ``d`` (dataset media for the browser / CDN).
     Sorted by filename so order matches prior ``sorted()`` glob behavior.
     """
     if not d.is_dir():
@@ -39,15 +39,15 @@ def list_dataset_samples_in_dir(d: Path) -> list[Path]:
     for p in d.iterdir():
         if not p.is_file():
             continue
-        if p.suffix.lower() == ".mp3":
+        if p.suffix.lower() == ".ogg":
             chosen.append(p)
     if not chosen:
-        raise ValueError(f"No .mp3 files in {d}. Add at least one sample.")
+        raise ValueError(f"No .ogg files in {d}. Add at least one sample.")
     return sorted(chosen, key=lambda p: p.name.lower())
 
 
 def list_category_wavs(category_dir: Path) -> list[Path]:
-    """List ``.mp3`` sources for a category directory (sorted)."""
+    """List ``.ogg`` sources for a category directory (sorted)."""
     if not category_dir.is_dir():
         raise FileNotFoundError(f"Category folder not found: {category_dir}")
     return list_dataset_samples_in_dir(category_dir)
