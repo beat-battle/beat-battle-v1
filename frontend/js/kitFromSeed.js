@@ -153,10 +153,35 @@ function arrayBufferToBase64(buffer) {
  * @param {string} relPath
  * @returns {Promise<string>} base64 OGG (dataset file bytes)
  */
+/**
+ * Dataset files must be OGG; HTML/error pages decode as "failed" in the browser.
+ * @param {string} relPath
+ * @param {ArrayBuffer} arr
+ */
+function assertOggPayload(relPath, arr) {
+  if (arr.byteLength < 4) {
+    throw new Error(`Empty or truncated audio (${relPath}).`);
+  }
+  const u8 = new Uint8Array(arr, 0, 4);
+  const sig = String.fromCharCode(u8[0], u8[1], u8[2], u8[3]);
+  if (sig === "OggS") return;
+  const peekLen = Math.min(256, arr.byteLength);
+  const peek = new Uint8Array(arr, 0, peekLen);
+  const text = new TextDecoder("utf-8", { fatal: false }).decode(peek);
+  const t = text.trimStart();
+  if (t.startsWith("<") || t.startsWith("<!") || /^\s*html/i.test(text.slice(0, 24))) {
+    throw new Error(
+      `Got a web page instead of audio for ${relPath}. Check CDN URL or try again.`,
+    );
+  }
+  throw new Error(`Expected OGG audio for ${relPath} (missing OggS header).`);
+}
+
 async function fetchMediaKitBase64(apiBase, relPath) {
   const res = await fetch(datasetMediaUrl(apiBase, relPath));
   if (!res.ok) throw new Error(`fetch ${relPath}: ${res.status}`);
   const arr = await res.arrayBuffer();
+  assertOggPayload(relPath, arr);
   return arrayBufferToBase64(arr);
 }
 
@@ -186,7 +211,14 @@ export async function fetchDecodeResample(audioContext, apiBase, relPath) {
   const res = await fetch(datasetMediaUrl(apiBase, relPath));
   if (!res.ok) throw new Error(`fetch ${relPath}: ${res.status}`);
   const arr = await res.arrayBuffer();
-  const decoded = await audioContext.decodeAudioData(arr.slice(0));
+  assertOggPayload(relPath, arr);
+  let decoded;
+  try {
+    decoded = await audioContext.decodeAudioData(arr.slice(0));
+  } catch (e) {
+    const hint = e instanceof Error ? e.message : String(e);
+    throw new Error(`Could not decode ${relPath}: ${hint}`);
+  }
   return resampleTo44100(decoded);
 }
 
@@ -269,9 +301,16 @@ export async function loadSynthBuffersAndMp3Base64Parallel({
       const res = await fetch(datasetMediaUrl(apiBase, relPath));
       if (!res.ok) throw new Error(`fetch ${relPath}: ${res.status}`);
       const arr = await res.arrayBuffer();
+      assertOggPayload(relPath, arr);
       base64[key] = arrayBufferToBase64(arr);
-      const decoded = await audioContext.decodeAudioData(arr.slice(0));
-      buffers[key] = await resampleTo44100(decoded);
+      try {
+        const decoded = await audioContext.decodeAudioData(arr.slice(0));
+        buffers[key] = await resampleTo44100(decoded);
+      } catch (e) {
+        const hint = e instanceof Error ? e.message : String(e);
+        console.warn(`[kit] decodeAudioData failed for ${relPath} (${key}):`, hint);
+        buffers[key] = undefined;
+      }
     }),
   );
   return { buffers, base64 };

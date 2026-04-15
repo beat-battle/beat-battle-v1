@@ -42,7 +42,7 @@ export function mountAuthCornerMenu(ctx, opts = {}) {
     <div class="auth-corner-stack">
       <div class="auth-corner-card">
         <div class="auth-corner-card-label">Signed in</div>
-        <div class="auth-corner-name" id="auth-corner-name">…</div>
+        <div class="auth-corner-name name-with-rank" id="auth-corner-name">…</div>
         <div class="auth-corner-wins" id="auth-corner-wins">—</div>
       </div>
       <div class="auth-corner-actions">
@@ -59,7 +59,7 @@ export function mountAuthCornerMenu(ctx, opts = {}) {
   fetchMe()
     .then((me) => {
       if (nameEl) {
-        nameEl.innerHTML = `${supporterDisplayNameInnerHtml(me.username)}${rankBadgeHtml(me.rank)}`;
+        nameEl.innerHTML = `${rankBadgeHtml(me.rank)}${supporterDisplayNameInnerHtml(me.username)}`;
       }
       if (winsEl) winsEl.textContent = `${me.wins} ${me.wins === 1 ? "win" : "wins"}`;
     })

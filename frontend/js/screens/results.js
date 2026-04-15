@@ -342,8 +342,8 @@ export function mountResultsScreen(root, ctx) {
         sessionStorage.setItem(
           RANK_PENDING_KEY,
           JSON.stringify({
+            key: me.rank.key,
             label: me.rank.label,
-            abbrev: me.rank.abbrev,
             color: me.rank.color,
           }),
         );

@@ -51,6 +51,7 @@ input,
 textarea,
 select,
 .auth-corner-name,
+.name-with-rank,
 .lb-player,
 .results-winner-name,
 .mp-chat-who,
@@ -63,7 +64,6 @@ select,
 .app-error-toast-meta,
 .mp-presence-toast-text,
 .rank-up-title,
-.rank-up-abbrev,
 .dev-stats-panel__card,
 .credits-entry-name,
 .credits-entry-role {
@@ -1989,22 +1989,28 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.lb-row > span {
+  display: flex;
+  align-items: center;
+  min-height: 0;
+}
+
+.lb-row > span:first-child {
+  justify-content: center;
+  color: var(--red);
+}
+
+.lb-row > span:last-child {
+  justify-content: flex-end;
+  color: var(--text-heading);
+}
+
 .lb-row-head {
   color: var(--text-muted);
   font-size: 0.62rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   border-bottom-color: rgba(255, 255, 255, 0.14);
-}
-
-.lb-row > span:first-child {
-  color: var(--red);
-  text-align: center;
-}
-
-.lb-row > span:last-child {
-  text-align: right;
-  color: var(--text-heading);
 }
 
 /* Top-left social links — stack, matches auth-corner chrome */
@@ -2530,15 +2536,37 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
 
 /* Competitive ranks */
 .rank-badge {
-  font-weight: 600;
-  font-size: 0.88em;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-right: 0.30em;
+  line-height: 0;
+}
+
+.rank-badge__img {
+  display: block;
+  width: 2.2em;
+  height: 2.2em;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* Rank icon + name — same vertical alignment as leaderboard rows */
+.name-with-rank,
+.lb-player {
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 0.15em;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.name-with-rank {
+  display: inline-flex;
 }
 
 .lb-player {
-  min-width: 0;
-  word-break: break-word;
+  justify-content: flex-start;
 }
 
 .rank-up-overlay {
@@ -2610,12 +2638,17 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   color: var(--text-heading);
 }
 
-.rank-up-abbrev {
+.rank-up-badge-wrap {
   margin: 0 0 1.25rem;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--rank-up-accent, #cd7f32);
-  letter-spacing: 0.06em;
+  display: flex;
+  justify-content: center;
+}
+
+.rank-up-badge-img {
+  display: block;
+  width: 4.5rem;
+  height: 4.5rem;
+  object-fit: contain;
 }
 
 .rank-up-dismiss {

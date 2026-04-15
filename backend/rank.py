@@ -8,15 +8,15 @@ from typing import Any
 
 # Ordered by wins_min ascending; rank_for_wins picks the highest tier where wins >= wins_min.
 _RANK_ROWS: tuple[tuple[str, int, str, str, str], ...] = (
-    ("copper_1", 1, "[CI]", "Copper 1", "#cd7f32"),
-    ("copper_2", 3, "[CII]", "Copper 2", "#cd7f32"),
-    ("copper_3", 5, "[CIII]", "Copper 3", "#cd7f32"),
-    ("silver_1", 10, "[SI]", "Silver 1", "#c0c0c0"),
-    ("silver_2", 15, "[SII]", "Silver 2", "#c0c0c0"),
-    ("silver_3", 20, "[SIII]", "Silver 3", "#c0c0c0"),
-    ("gold_1", 30, "[GI]", "Gold 1", "#d4af37"),
-    ("gold_2", 40, "[GII]", "Gold 2", "#d4af37"),
-    ("gold_3", 50, "[GIII]", "Gold 3", "#d4af37"),
+    ("copper_1", 1, "", "Copper 1", "#cd7f32"),
+    ("copper_2", 3, "", "Copper 2", "#cd7f32"),
+    ("copper_3", 5, "", "Copper 3", "#cd7f32"),
+    ("silver_1", 10, "", "Silver 1", "#c0c0c0"),
+    ("silver_2", 15, "", "Silver 2", "#c0c0c0"),
+    ("silver_3", 20, "", "Silver 3", "#c0c0c0"),
+    ("gold_1", 30, "", "Gold 1", "#d4af37"),
+    ("gold_2", 40, "", "Gold 2", "#d4af37"),
+    ("gold_3", 50, "", "Gold 3", "#d4af37"),
 )
 
 _RANK_KEYS_ORDER: tuple[str, ...] = tuple(r[0] for r in _RANK_ROWS)

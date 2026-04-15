@@ -62,7 +62,7 @@ function renderLobby(root, lobby, selfId, kitProgress) {
     <div class="lobby-row${kickSlot !== "" ? " lobby-row--kickable" : ""}">
       <div class="${nameWrapClass}">
         ${kickSlot}
-        <span class="lobby-name">${supporterDisplayNameInnerHtml(p.name)}${rankBadgeHtml(p.rank)}${p.id === hostId ? " · host" : ""}</span>
+        <span class="lobby-name name-with-rank">${rankBadgeHtml(p.rank)}${supporterDisplayNameInnerHtml(p.name)}${p.id === hostId ? " · host" : ""}</span>
       </div>
       <span class="lobby-ready">${p.ready ? "✔" : ""}</span>
     </div>

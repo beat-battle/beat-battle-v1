@@ -27,10 +27,10 @@ const CREDITS = [
     name: "inboredom",
     contribution: "UI Sound Design",
   },
-  /*{
+  {
     name: "danny / 47450 (discord)",
-    contribution: "Pixel art Icons",
-  },*/
+    contribution: "Pixel Art Rank Icons",
+  },
 ];
 
 export function openCreditsOverlay() {

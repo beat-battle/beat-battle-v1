@@ -51,7 +51,7 @@ export function mountLeaderboardScreen(root, ctx) {
           (r, i) => `
         <div class="lb-row">
           <span>${i + 1}</span>
-          <span class="lb-player">${supporterDisplayNameInnerHtml(r.username)}${rankBadgeHtml(r.rank)}</span>
+          <span class="lb-player name-with-rank">${rankBadgeHtml(r.rank)}${supporterDisplayNameInnerHtml(r.username)}</span>
           <span>${escapeHtml(String(r.wins))}</span>
         </div>`,
         )
