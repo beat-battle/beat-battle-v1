@@ -1228,6 +1228,9 @@ class LobbyManager:
         if snap is not None:
             await self.broadcast(lobby_id, {"type": "lobby_update", "lobby": snap})
 
+        if state_after == LobbyState.LOBBY:
+            await self._try_start_game(lobby_id)
+
     async def _dissolve_lobby(self, lobby_id: str) -> None:
         async with self._lock:
             lobby = self.lobbies.pop(lobby_id, None)
@@ -1307,7 +1310,7 @@ class LobbyManager:
         base = self.uploads_root / lobby_id
         if not base.is_dir():
             return
-        for ext in (".wav", ".mp3", ".WAV", ".MP3"):
+        for ext in (".ogg", ".OGG", ".wav", ".mp3", ".WAV", ".MP3"):
             p = base / f"{player_id}{ext}"
             if p.is_file():
                 try:
@@ -1320,7 +1323,7 @@ class LobbyManager:
         if not lobby or owner_id not in lobby.uploaded:
             return None
         base = self.uploads_root / lobby_id
-        for ext in (".wav", ".mp3", ".WAV", ".MP3"):
+        for ext in (".ogg", ".OGG", ".wav", ".mp3", ".WAV", ".MP3"):
             p = base / f"{owner_id}{ext}"
             if p.is_file():
                 return p

@@ -70,9 +70,9 @@ export function mountUploadScreen(root, ctx) {
         <div class="mp-panel-head-timer">${phaseTimerRowHtml("mp-upload-phase")}</div>
         <div class="mp-panel-head-roster">${progressHintSlotHtml("mp-corner-upload")}</div>
       </div>
-      <p class="arcade-hint">2:00 · MP3 or WAV · max 30MB</p>
-      <p class="arcade-hint upload-hint-muted">After time runs out you can still vote and listen, but others won’t hear your beat.</p>
-      <p class="arcade-hint upload-hint-muted hidden" id="upload-on-server">Your beat is already on the server.</p>
+      <p class="arcade-hint">MP3 or WAV · max 30MB · up to 45s</p>
+      <p class="arcade-hint upload-hint-muted">No upload? You can still listen and vote!</p>
+      <p class="arcade-hint upload-hint-muted hidden" id="upload-on-server">Already uploaded</p>
       <form id="upload-form" class="upload-form">
         <input type="file" id="beat-file" accept=".mp3,.wav,audio/mpeg,audio/wav" required />
         <button type="submit" class="arcade-btn arcade-btn-primary" id="upload-submit">Upload</button>

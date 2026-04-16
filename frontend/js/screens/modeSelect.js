@@ -92,6 +92,14 @@ function multiplayerButtonHtml() {
       </button>`;
 }
 
+/** @param {HTMLElement | null} el */
+function setMpButtonLabel(el, label) {
+  if (!el) return;
+  const inner = el.querySelector(".arcade-btn-label");
+  if (inner) inner.textContent = label;
+  else el.textContent = label;
+}
+
 export function mountModeSelectScreen(root, ctx) {
   setAppErrorContext({ screen: "Home", phase: "Mode select" });
   const loggedIn = isLoggedIn();
@@ -149,6 +157,21 @@ export function mountModeSelectScreen(root, ctx) {
   const mp = root.querySelector("#btn-mp");
   const lockHint = root.querySelector("#mp-lock-hint");
   const panel = root.querySelector(".mode-select.arcade-panel");
+
+  if (loggedIn && mp) {
+    void (async () => {
+      try {
+        const pending = await fetchMpReconnectPending();
+        cleanupReconnectSuppressIfNoPending(pending);
+        if (pending && shouldShowReconnectOverlay(pending)) {
+          setMpButtonLabel(mp, "Reconnect");
+          mp.setAttribute("aria-label", "Reconnect to your previous match");
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+  }
 
   const goMultiplayerHub = () => {
     if (!isLoggedIn()) {

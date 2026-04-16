@@ -34,6 +34,8 @@ DEFAULT_COOK_DURATION_MIN = 10
 UPLOAD_PHASE_S = 120
 # Seconds per beat in slideshow (1–45s playback) plus small pad before votes unlock.
 SLIDESHOW_SEGMENT_S = 46
+# Stored/downloaded beat length cap; matches frontend CLIP_MAX_SEC (voting_slideshow.js).
+BEAT_MAX_PLAYBACK_S = 45
 # Max time to collect votes after unlock.
 VOTING_COLLECT_S = 30
 # Lobbies in results older than this are purged (uploads deleted).

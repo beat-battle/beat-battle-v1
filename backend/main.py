@@ -33,6 +33,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .auth import get_current_user, login_user, register_user
+from .beat_upload_trim import trim_beat_upload_to_ogg
 from .database import get_db, init_db
 from .generator import generate_kit_light
 from .kit_manifest import get_kit_manifest_cached
@@ -405,6 +406,17 @@ def _sniff_audio(buf: bytes) -> str | None:
     return None
 
 
+def _unlink_legacy_beat_formats(dest_dir: Path, player_id: str) -> None:
+    """Remove WAV/MP3 artifacts so ``player_id.ogg`` is the sole canonical beat file."""
+    for ext in (".wav", ".mp3", ".WAV", ".MP3"):
+        p = dest_dir / f"{player_id}{ext}"
+        if p.is_file():
+            try:
+                p.unlink()
+            except OSError:
+                pass
+
+
 @app.post("/upload/beat/{lobby_id}")
 async def upload_beat(
     lobby_id: str,
@@ -427,31 +439,58 @@ async def upload_beat(
 
     dest_dir = UPLOADS_ROOT / lobby_id
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / f"{player_id}{suffix}"
+    dest = dest_dir / f"{player_id}.ogg"
+    part = dest_dir / f"{player_id}{suffix}.part"
 
     total = 0
     first_chunk: bytes | None = None
-    with dest.open("wb") as out:
-        while True:
-            chunk = await file.read(1024 * 512)
-            if not chunk:
-                break
-            if first_chunk is None:
-                first_chunk = chunk[:64]
-            total += len(chunk)
-            if total > MAX_BEAT_BYTES:
-                dest.unlink(missing_ok=True)
-                raise HTTPException(status_code=400, detail="File too large (max 30MB).")
-            out.write(chunk)
+    try:
+        with part.open("wb") as out:
+            while True:
+                chunk = await file.read(1024 * 512)
+                if not chunk:
+                    break
+                if first_chunk is None:
+                    first_chunk = chunk[:64]
+                total += len(chunk)
+                if total > MAX_BEAT_BYTES:
+                    raise HTTPException(status_code=400, detail="File too large (max 30MB).")
+                out.write(chunk)
 
-    if total == 0:
-        dest.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail="Empty file.")
+        if total == 0:
+            raise HTTPException(status_code=400, detail="Empty file.")
 
-    sniffed = _sniff_audio(first_chunk or b"")
-    if sniffed and sniffed != suffix:
+        sniffed = _sniff_audio(first_chunk or b"")
+        if sniffed and sniffed != suffix:
+            raise HTTPException(status_code=400, detail="File content does not match extension.")
+
+        try:
+            await asyncio.to_thread(
+                trim_beat_upload_to_ogg,
+                part,
+                dest,
+                source_suffix=suffix,
+            )
+        except HTTPException:
+            raise
+        except RuntimeError as e:
+            dest.unlink(missing_ok=True)
+            msg = str(e)
+            if "ffmpeg not found" in msg:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Beat uploads require ffmpeg (libvorbis) on the server.",
+                ) from e
+            raise HTTPException(status_code=400, detail="Could not process audio file.") from e
+        except Exception as e:
+            dest.unlink(missing_ok=True)
+            raise HTTPException(status_code=400, detail="Could not process audio file.") from e
+    except HTTPException:
+        part.unlink(missing_ok=True)
         dest.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail="File content does not match extension.")
+        raise
+
+    _unlink_legacy_beat_formats(dest_dir, player_id)
 
     await manager.record_upload(lobby_id, player_id)
     return {"ok": True}
@@ -473,7 +512,13 @@ async def get_beat(
     path = manager.beat_file_path(lobby_id, owner_id)
     if not path or not path.is_file():
         raise HTTPException(status_code=404, detail="Beat not found.")
-    mt = "audio/mpeg" if path.suffix.lower() == ".mp3" else "audio/wav"
+    sfx = path.suffix.lower()
+    if sfx == ".mp3":
+        mt = "audio/mpeg"
+    elif sfx == ".ogg":
+        mt = "audio/ogg"
+    else:
+        mt = "audio/wav"
     return FileResponse(path, media_type=mt, filename=path.name)
 
 
