@@ -33,7 +33,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, ORJSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, ORJSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
@@ -41,7 +41,8 @@ from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .auth import get_current_user, login_user, register_user
+from .auth import create_ws_ticket, get_current_user, login_user, register_user
+from . import beats_r2
 from .beat_upload_trim import trim_beat_upload_to_ogg
 from .database import get_db, init_db
 from .generator import generate_kit_light
@@ -51,8 +52,14 @@ from .models import SiteStats, Supporter, User
 from .multiplayer import LobbyManager
 from .multiplayer.lobby import LobbyState
 from .multiplayer.ws import router as ws_router
+from .multiplayer.ws_rate_limit import SlidingWindowRateLimiter
 from .rank import rank_for_wins, rank_index_for_wins, rank_public_dict
 from .schemas import (
+    BeatUploadCapabilitiesResponse,
+    BeatUploadCompleteRequest,
+    BeatUploadCompleteResponse,
+    BeatUploadPresignRequest,
+    BeatUploadPresignResponse,
     LeaderboardEntry,
     LoginRequest,
     MeResponse,
@@ -150,9 +157,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Beat Battle", version="1.0.0", lifespan=lifespan)
 
+_CORS_ORIGINS: list[str] = [
+    "https://beat-battle.net",
+    "https://www.beat-battle.net",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+]
+_extra_cors = os.environ.get("COOKUP_CORS_ORIGINS", "").strip()
+if _extra_cors:
+    _CORS_ORIGINS.extend(o.strip() for o in _extra_cors.split(",") if o.strip())
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -189,6 +206,9 @@ class StaticCacheControlMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(StaticCacheControlMiddleware)
+
+_LOGIN_LIMIT = SlidingWindowRateLimiter(max_events=10, window_s=60.0)
+_REGISTER_LIMIT = SlidingWindowRateLimiter(max_events=5, window_s=60.0)
 
 app.include_router(ws_router)
 
@@ -301,14 +321,34 @@ def delete_dev_supporter(
 
 @app.post("/register", response_model=RegisterResponse)
 def post_register(
-    body: RegisterRequest, db: Session = Depends(get_db)
+    request: Request, body: RegisterRequest, db: Session = Depends(get_db)
 ) -> RegisterResponse:
+    ip = (request.client.host if request.client else "unknown")
+    if not _REGISTER_LIMIT.check(f"reg:{ip}"):
+        raise HTTPException(status_code=429, detail="Too many registrations. Try again later.")
     return register_user(db, body)
 
 
 @app.post("/login", response_model=TokenResponse)
-def post_login(body: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+def post_login(
+    request: Request, body: LoginRequest, db: Session = Depends(get_db)
+) -> TokenResponse:
+    ip = (request.client.host if request.client else "unknown")
+    if not _LOGIN_LIMIT.check(f"login:{ip}"):
+        raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
     return login_user(db, body)
+
+
+@app.post("/api/ws-ticket")
+def post_ws_ticket(user: User = Depends(get_current_user)) -> dict[str, str]:
+    """Issue a short-lived, single-use ticket for WebSocket auth.
+
+    The frontend calls this before opening a WS connection, then passes the
+    ticket as ``?token=...`` instead of the long-lived JWT.  Even if the URL
+    leaks in server/proxy logs the ticket is already expired (30 s) and
+    single-use."""
+    ticket = create_ws_ticket(user.id, user.username)
+    return {"ticket": ticket}
 
 
 def _me_response_from_user(user: User) -> MeResponse:
@@ -409,6 +449,141 @@ async def get_match_sync(
     if sync is None:
         raise HTTPException(status_code=404, detail="Match not available.")
     return sync
+
+
+@app.get(
+    "/api/upload/capabilities",
+    response_class=ORJSONResponse,
+)
+async def beat_upload_capabilities() -> BeatUploadCapabilitiesResponse:
+    return BeatUploadCapabilitiesResponse(**beats_r2.r2_capabilities())
+
+
+@app.post(
+    "/api/upload/presign",
+    response_class=ORJSONResponse,
+)
+async def beat_upload_presign(
+    body: BeatUploadPresignRequest,
+    user: User = Depends(get_current_user),
+) -> BeatUploadPresignResponse:
+    beats_r2.require_r2_config()
+    manager: LobbyManager = app.state.manager
+    lid, pid = body.lobby_id, body.player_id
+    if not manager.verify_player_belongs_to_user(lid, pid, user.id):
+        raise HTTPException(status_code=403, detail="Not in this lobby.")
+    lobby = manager.lobbies.get(lid)
+    if not lobby or pid not in lobby.players:
+        raise HTTPException(status_code=403, detail="Not in this lobby.")
+    if lobby.state != LobbyState.UPLOAD:
+        raise HTTPException(status_code=400, detail="Upload phase is not active.")
+
+    upload_id = beats_r2.issue_upload_id()
+    put_url = await asyncio.to_thread(
+        beats_r2.generate_presigned_put,
+        lobby_id=lid,
+        player_id=pid,
+        upload_id=upload_id,
+        content_type=body.content_type,
+    )
+    return BeatUploadPresignResponse(
+        upload_id=upload_id,
+        put_url=put_url,
+        required_headers={"Content-Type": body.content_type},
+    )
+
+
+@app.post(
+    "/api/upload/complete",
+    response_class=ORJSONResponse,
+)
+async def beat_upload_complete(
+    body: BeatUploadCompleteRequest,
+    user: User = Depends(get_current_user),
+) -> BeatUploadCompleteResponse:
+    from botocore.exceptions import ClientError
+
+    beats_r2.require_r2_config()
+    manager: LobbyManager = app.state.manager
+    lid, pid, upload_id = body.lobby_id, body.player_id, body.upload_id
+
+    idem = manager.r2_beat_idempotent_response(lid, pid, upload_id)
+    if idem is not None:
+        return BeatUploadCompleteResponse(
+            ok=bool(idem["ok"]),
+            ready=bool(idem["ready"]),
+            idempotent=bool(idem["idempotent"]),
+            accepted=True,
+        )
+
+    if not manager.verify_player_belongs_to_user(lid, pid, user.id):
+        raise HTTPException(status_code=403, detail="Not in this lobby.")
+    lobby = manager.lobbies.get(lid)
+    if not lobby or pid not in lobby.players:
+        raise HTTPException(status_code=403, detail="Not in this lobby.")
+    if lobby.state != LobbyState.UPLOAD:
+        raise HTTPException(status_code=400, detail="Upload phase is not active.")
+
+    try:
+        head = await asyncio.to_thread(
+            beats_r2.head_staging_object, lid, pid, upload_id
+        )
+    except ClientError as e:
+        code = (e.response.get("Error") or {}).get("Code", "")
+        if code in ("404", "NoSuchKey", "NotFound"):
+            raise HTTPException(
+                status_code=400, detail="Staging object not found."
+            ) from e
+        raise HTTPException(
+            status_code=502, detail="R2 head_object failed."
+        ) from e
+
+    cl = int(head.get("ContentLength") or 0)
+    if cl != body.content_length:
+        raise HTTPException(
+            status_code=400, detail="content_length does not match object."
+        )
+    if cl > beats_r2.MAX_BEAT_BYTES or cl < 1:
+        raise HTTPException(status_code=400, detail="Invalid object size.")
+
+    etag_h = beats_r2.normalize_etag(head.get("ETag"))
+    etag_b = beats_r2.normalize_etag(body.etag)
+    if etag_h and etag_b and etag_h != etag_b:
+        raise HTTPException(status_code=400, detail="ETag mismatch.")
+
+    ct = (head.get("ContentType") or "").strip() or "application/octet-stream"
+
+    stub_ready = beats_r2.r2_stub_ready_default_on()
+    try:
+        if stub_ready:
+            await asyncio.to_thread(
+                beats_r2.copy_staging_to_final,
+                lid,
+                pid,
+                upload_id,
+                ct,
+            )
+            await manager.record_upload(lid, pid)
+            ready = True
+        else:
+            ready = False
+    except ClientError as e:
+        raise HTTPException(
+            status_code=502, detail="R2 copy to final failed."
+        ) from e
+
+    manager.r2_beat_register_complete(
+        lid,
+        pid,
+        upload_id,
+        etag=etag_b or etag_h,
+        content_length=cl,
+        sha256=body.sha256,
+        ready=ready,
+    )
+    return BeatUploadCompleteResponse(
+        ok=True, ready=ready, idempotent=False, accepted=True
+    )
 
 
 def _sniff_audio(buf: bytes) -> str | None:
@@ -519,13 +694,13 @@ async def upload_beat(
     return {"ok": True}
 
 
-@app.get("/beats/{lobby_id}/{owner_id}")
+@app.get("/beats/{lobby_id}/{owner_id}", response_model=None)
 async def get_beat(
     lobby_id: str,
     owner_id: str,
     requester: str = Query(..., description="Connecting player's id"),
     user: User = Depends(get_current_user),
-) -> FileResponse:
+) -> FileResponse | RedirectResponse:
     manager: LobbyManager = app.state.manager
     expected = manager.player_id_for_user_in_lobby(lobby_id, user.id)
     if expected is None or expected != requester:
@@ -533,16 +708,26 @@ async def get_beat(
     if not manager.can_access_beat(lobby_id, requester):
         raise HTTPException(status_code=403, detail="Not allowed.")
     path = manager.beat_file_path(lobby_id, owner_id)
-    if not path or not path.is_file():
-        raise HTTPException(status_code=404, detail="Beat not found.")
-    sfx = path.suffix.lower()
-    if sfx == ".mp3":
-        mt = "audio/mpeg"
-    elif sfx == ".ogg":
-        mt = "audio/ogg"
-    else:
-        mt = "audio/wav"
-    return FileResponse(path, media_type=mt, filename=path.name)
+    if path and path.is_file():
+        sfx = path.suffix.lower()
+        if sfx == ".mp3":
+            mt = "audio/mpeg"
+        elif sfx == ".ogg":
+            mt = "audio/ogg"
+        else:
+            mt = "audio/wav"
+        return FileResponse(path, media_type=mt, filename=path.name)
+    lobby = manager.lobbies.get(lobby_id)
+    if (
+        beats_r2.r2_capabilities()["r2_direct"]
+        and lobby is not None
+        and owner_id in lobby.uploaded
+    ):
+        return RedirectResponse(
+            url=beats_r2.public_final_url(lobby_id, owner_id),
+            status_code=302,
+        )
+    raise HTTPException(status_code=404, detail="Beat not found.")
 
 
 if _DATASET_ROOT.is_dir():

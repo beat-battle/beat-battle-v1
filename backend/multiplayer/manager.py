@@ -23,6 +23,7 @@ from typing import Any
 
 from starlette.websockets import WebSocket
 
+from .. import beats_r2
 from .lobby import (
     LOBBY_RESULTS_TTL_S,
     MAX_LOBBY_PLAYERS,
@@ -73,6 +74,9 @@ class LobbyManager:
         self._grace_tasks: dict[str, asyncio.Task[None]] = {}
         # Wall-clock deadline for menu countdown / GET pending (parallel to grace tasks)
         self._grace_deadline_ts: dict[str, float] = {}
+        # R2 direct-upload: idempotent complete per (lobby_id, player_id, upload_id)
+        self._r2_beat_complete: set[tuple[str, str, str]] = set()
+        self._r2_beat_complete_meta: dict[tuple[str, str, str], dict[str, Any]] = {}
 
     def register_auth_session(
         self, player_id: str, user_id: int, username: str
@@ -851,6 +855,39 @@ class LobbyManager:
         )
         await self.broadcast(lobby_id, {"type": "lobby_update", "lobby": snap})
 
+    def r2_beat_idempotent_response(
+        self, lobby_id: str, player_id: str, upload_id: str
+    ) -> dict[str, Any] | None:
+        key = (lobby_id, player_id, upload_id)
+        if key not in self._r2_beat_complete:
+            return None
+        meta = self._r2_beat_complete_meta.get(key, {})
+        return {
+            "ok": True,
+            "idempotent": True,
+            "ready": bool(meta.get("ready", False)),
+        }
+
+    def r2_beat_register_complete(
+        self,
+        lobby_id: str,
+        player_id: str,
+        upload_id: str,
+        *,
+        etag: str,
+        content_length: int,
+        sha256: str | None,
+        ready: bool,
+    ) -> None:
+        key = (lobby_id, player_id, upload_id)
+        self._r2_beat_complete.add(key)
+        self._r2_beat_complete_meta[key] = {
+            "etag": etag,
+            "content_length": content_length,
+            "sha256": sha256,
+            "ready": ready,
+        }
+
     async def slideshow_complete(self, player_id: str) -> None:
         """Slideshow done — can vote early if everyone skipped ahead."""
         bump: tuple[str, float] | None = None
@@ -1110,6 +1147,8 @@ class LobbyManager:
             del self.lobbies[old_id]
 
         self._delete_lobby_upload_dir_only(old_id)
+        if beats_r2.r2_capabilities()["r2_direct"]:
+            await asyncio.to_thread(beats_r2.r2_delete_lobby_objects, old_id)
         if new_id is not None:
             new_snap = self.snapshot_for_broadcast(new_id)
             if new_snap:
@@ -1202,6 +1241,10 @@ class LobbyManager:
             return
 
         self._unlink_player_beat_upload(lobby_id, player_id)
+        if beats_r2.r2_capabilities()["r2_direct"]:
+            await asyncio.to_thread(
+                beats_r2.r2_delete_player_beat_objects, lobby_id, player_id
+            )
 
         await self.broadcast(
             lobby_id,
@@ -1328,6 +1371,14 @@ class LobbyManager:
         await self._purge_lobby(lobby_id, remove_dir=True)
 
     async def _purge_lobby(self, lobby_id: str, remove_dir: bool = True) -> None:
+        self._r2_beat_complete = {
+            t for t in self._r2_beat_complete if t[0] != lobby_id
+        }
+        self._r2_beat_complete_meta = {
+            k: v
+            for k, v in self._r2_beat_complete_meta.items()
+            if k[0] != lobby_id
+        }
         t = self._cook_tasks.pop(lobby_id, None)
         if t:
             t.cancel()
@@ -1341,6 +1392,8 @@ class LobbyManager:
             d = self.uploads_root / lobby_id
             if d.is_dir():
                 shutil.rmtree(d, ignore_errors=True)
+        if beats_r2.r2_capabilities()["r2_direct"]:
+            await asyncio.to_thread(beats_r2.r2_delete_lobby_objects, lobby_id)
         old: Lobby | None = None
         async with self._lock:
             old = self.lobbies.pop(lobby_id, None)

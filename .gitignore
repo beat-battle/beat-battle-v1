@@ -1,4 +1,6 @@
 cookup.db
+docs/
+misc/
 uploads/
 __pycache__/
 *.pyc

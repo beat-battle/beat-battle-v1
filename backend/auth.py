@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import hashlib
 import os
+import secrets
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -26,6 +29,11 @@ SECRET_KEY = os.environ.get(
 )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 7
+_WS_TICKET_TTL_S = 30
+# jti -> JWT exp (unix); only entries with exp >= now survive replay checks until pruned.
+_ws_ticket_consumed: dict[str, float] = {}
+_ws_ticket_lock = threading.Lock()
+_MAX_WS_JTI_LEN = 128
 
 security = HTTPBearer(auto_error=False)
 
@@ -126,6 +134,8 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Not authenticated.")
     try:
         payload = decode_token(creds.credentials)
+        if payload.get("typ") == "ws_ticket":
+            raise HTTPException(status_code=401, detail="Invalid or expired token.")
         uid = int(payload["sub"])
     except (JWTError, KeyError, ValueError, TypeError):
         raise HTTPException(status_code=401, detail="Invalid or expired token.")
@@ -133,6 +143,14 @@ def get_current_user(
     if user is None:
         raise HTTPException(status_code=401, detail="User not found.")
     return user
+
+
+def _ws_prune_consumed_locked(now: float) -> None:
+    """Drop consumed JTIs past JWT exp (with small skew). Caller must hold ``_ws_ticket_lock``."""
+    cutoff = now - 30.0
+    dead = [j for j, exp in _ws_ticket_consumed.items() if exp < cutoff]
+    for j in dead:
+        _ws_ticket_consumed.pop(j, None)
 
 
 def try_validate_ws_token(
@@ -146,9 +164,14 @@ def try_validate_ws_token(
         return None, "missing_token"
     try:
         payload = decode_token(str(token).strip())
+    except (JWTError, KeyError, ValueError, TypeError):
+        return None, "jwt_invalid"
+    if payload.get("typ") == "ws_ticket":
+        return None, "ws_ticket_wrong_channel"
+    try:
         uid = int(payload["sub"])
         un = str(payload["username"])
-    except (JWTError, KeyError, ValueError, TypeError):
+    except (KeyError, ValueError, TypeError):
         return None, "jwt_invalid"
     db = SessionLocal()
     try:
@@ -168,3 +191,63 @@ def validate_ws_token(token: str | None) -> tuple[int, str] | None:
     if reason is not None:
         return None
     return ok
+
+
+def create_ws_ticket(user_id: int, username: str) -> str:
+    """Short-lived single-use JWT for ``/ws?token=`` (see ``redeem_ws_ticket``)."""
+    jti = secrets.token_urlsafe(24)
+    expire = datetime.now(timezone.utc) + timedelta(seconds=_WS_TICKET_TTL_S)
+    payload = {
+        "sub": str(user_id),
+        "username": username,
+        "exp": expire,
+        "typ": "ws_ticket",
+        "jti": jti,
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def redeem_ws_ticket(token: str) -> tuple[int, str] | None:
+    """
+    If ``token`` is a valid unused ws ticket, mark ``jti`` consumed until JWT exp and return
+    ``(user_id, username)``. Otherwise return None (caller may try long-lived JWT — but
+    ``try_validate_ws_token`` rejects ``typ=ws_ticket`` so used tickets cannot authenticate twice).
+    """
+    raw = str(token or "").strip()
+    if not raw:
+        return None
+    try:
+        payload = jwt.decode(raw, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        return None
+    if payload.get("typ") != "ws_ticket":
+        return None
+    jti = payload.get("jti")
+    if not jti or not isinstance(jti, str) or len(jti) > _MAX_WS_JTI_LEN:
+        return None
+    exp = payload.get("exp")
+    if exp is None:
+        return None
+    try:
+        exp_f = float(exp)
+    except (TypeError, ValueError):
+        return None
+    try:
+        uid = int(payload["sub"])
+        un = str(payload["username"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    now = time.time()
+    with _ws_ticket_lock:
+        _ws_prune_consumed_locked(now)
+        if jti in _ws_ticket_consumed:
+            return None
+        _ws_ticket_consumed[jti] = exp_f
+    db = SessionLocal()
+    try:
+        user = db.get(User, uid)
+        if user is None or user.username != un:
+            return None
+        return uid, un
+    finally:
+        db.close()

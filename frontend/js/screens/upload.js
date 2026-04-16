@@ -1,7 +1,7 @@
 /**
  * Upload phase: pick a beat, hit the server before the timer ghosts you.
  */
-import { authHeadersMultipart } from "../authApi.js";
+import { authHeaders, authHeadersMultipart } from "../authApi.js";
 import { mountAuthCornerLeave } from "../authCorner.js";
 import {
   notifyMpServerError,
@@ -40,6 +40,20 @@ import { playSfxMajor, playSfxUploadAlarm } from "../sfx.js";
 import { mountVotingSlideshowScreen } from "./votingSlideshow.js";
 
 const UPLOAD_WINDOW_SEC = 120;
+const MAX_BEAT_BYTES = 30 * 1024 * 1024;
+
+/**
+ * @param {File} file
+ * @returns {string}
+ */
+function beatContentTypeForR2(file) {
+  const t = (file.type || "").trim().toLowerCase();
+  if (t === "audio/mpeg" || t === "audio/wav") return t;
+  const n = (file.name || "").toLowerCase();
+  if (n.endsWith(".mp3")) return "audio/mpeg";
+  if (n.endsWith(".wav")) return "audio/wav";
+  throw new Error("Only MP3 or WAV (audio/mpeg or audio/wav).");
+}
 
 export function mountUploadScreen(root, ctx) {
   setAppErrorContext({
@@ -66,6 +80,8 @@ export function mountUploadScreen(root, ctx) {
   let closedNotified = false;
   /** @type {ReturnType<typeof setInterval> | null} */
   let tickId = null;
+  /** @type {boolean | null} */
+  let useR2Direct = null;
 
   mountAuthCornerLeave(ctx);
   let unmountMpChat = mountMpChat({
@@ -138,6 +154,19 @@ export function mountUploadScreen(root, ctx) {
   };
 
   void (async () => {
+    try {
+      const capRes = await fetch(
+        `${ctx.apiBase}/api/upload/capabilities`,
+      );
+      if (capRes.ok) {
+        const cap = await capRes.json();
+        useR2Direct = Boolean(cap.r2_direct);
+      } else {
+        useR2Direct = false;
+      }
+    } catch {
+      useR2Direct = false;
+    }
     const sync = await fetchMatchSync(String(lobbyId));
     const L = lobbyLikeFromMatchSync(sync);
     if (L) {
@@ -210,23 +239,83 @@ export function mountUploadScreen(root, ctx) {
     const input = root.querySelector("#beat-file");
     const file = input?.files?.[0];
     if (!file) return;
+    if (file.size > MAX_BEAT_BYTES) {
+      const um = "File too large (max 30MB).";
+      if (statusEl) statusEl.textContent = um;
+      showAppError({
+        message: um,
+        hint: "Pick a smaller file.",
+        errorCode: "UPLOAD_TOO_LARGE",
+      });
+      return;
+    }
     playSfxMajor();
     if (statusEl) statusEl.textContent = "Uploading…";
-    const fd = new FormData();
-    fd.append("player_id", playerId);
-    fd.append("file", file);
+    const tryR2 = useR2Direct === true;
     try {
-      const res = await fetch(
-        `${ctx.apiBase}/upload/beat/${encodeURIComponent(lobbyId)}`,
-        {
+      if (tryR2) {
+        const ct = beatContentTypeForR2(file);
+        const pres = await fetch(`${ctx.apiBase}/api/upload/presign`, {
           method: "POST",
-          headers: authHeadersMultipart(),
-          body: fd,
-        },
-      );
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error(t || res.statusText);
+          headers: authHeaders(),
+          body: JSON.stringify({
+            lobby_id: lobbyId,
+            player_id: playerId,
+            content_type: ct,
+          }),
+        });
+        if (pres.status === 503) {
+          useR2Direct = false;
+          throw new Error("R2 not configured — refresh and try again.");
+        }
+        if (!pres.ok) {
+          const t = await pres.text();
+          throw new Error(t || pres.statusText);
+        }
+        /** @type {{ upload_id: string, put_url: string, required_headers: Record<string, string> }} */
+        const presBody = await pres.json();
+        const putRes = await fetch(presBody.put_url, {
+          method: "PUT",
+          body: file,
+          headers: presBody.required_headers,
+        });
+        if (!putRes.ok) {
+          const t = await putRes.text();
+          throw new Error(t || `R2 PUT ${putRes.status}`);
+        }
+        const etagRaw =
+          putRes.headers.get("ETag") || putRes.headers.get("etag") || "";
+        const comp = await fetch(`${ctx.apiBase}/api/upload/complete`, {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({
+            lobby_id: lobbyId,
+            player_id: playerId,
+            upload_id: presBody.upload_id,
+            content_length: file.size,
+            etag: etagRaw,
+          }),
+        });
+        if (!comp.ok) {
+          const t = await comp.text();
+          throw new Error(t || comp.statusText);
+        }
+      } else {
+        const fd = new FormData();
+        fd.append("player_id", playerId);
+        fd.append("file", file);
+        const res = await fetch(
+          `${ctx.apiBase}/upload/beat/${encodeURIComponent(lobbyId)}`,
+          {
+            method: "POST",
+            headers: authHeadersMultipart(),
+            body: fd,
+          },
+        );
+        if (!res.ok) {
+          const t = await res.text();
+          throw new Error(t || res.statusText);
+        }
       }
       lobbyView = applyMatchWsToLobby(lobbyView, {
         type: "beat_uploaded",
