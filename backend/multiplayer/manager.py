@@ -1283,6 +1283,27 @@ class LobbyManager:
             await self._purge_lobby(lobby_id)
             return
 
+        # Last missing voter left — everyone still in the lobby has already voted.
+        if state_after == LobbyState.VOTING and left_count > 0:
+            should_finalize = False
+            async with self._lock:
+                lobby_v = self.lobbies.get(lobby_id)
+                if lobby_v and lobby_v.state == LobbyState.VOTING:
+                    beat_owners = set(lobby_v.uploaded)
+                    req = required_voters(lobby_v, beat_owners)
+                    if req.issubset(lobby_v.votes.keys()):
+                        if lobby_id in self._vote_tasks:
+                            self._vote_tasks[lobby_id].cancel()
+                        should_finalize = True
+            if should_finalize:
+                snap = self.snapshot_for_broadcast(lobby_id)
+                if snap is not None:
+                    await self.broadcast(
+                        lobby_id, {"type": "lobby_update", "lobby": snap}
+                    )
+                await finalize_results(self, lobby_id)
+                return
+
         if left_count == 1 and state_after == LobbyState.RESULTS:
             await self._dissolve_results_solo_player(lobby_id)
             return

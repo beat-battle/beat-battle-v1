@@ -79,6 +79,87 @@ def test_disconnect_prunes_uploaded_votes_slideshow(tmp_path: Path) -> None:
     asyncio.run(run())
 
 
+def test_disconnect_voting_last_nonvoter_leaves_finalizes_results(tmp_path: Path) -> None:
+    """If everyone except one has voted and that player leaves, go to results."""
+
+    async def run() -> None:
+        mgr = LobbyManager(tmp_path)
+        lid = "VOTING01"
+        p1, p2, p3 = "vP1aaaaaa", "vP2bbbbbb", "vP3cccccc"
+        lobby = Lobby(id=lid, spice=0.25, is_public=True)
+        lobby.state = LobbyState.VOTING
+        lobby.votes_unlock_at = time.time() - 1.0
+        lobby.players[p1] = Player(id=p1, name="A", user_id=10, wins=0)
+        lobby.players[p2] = Player(id=p2, name="B", user_id=20, wins=0)
+        lobby.players[p3] = Player(id=p3, name="C", user_id=30, wins=0)
+        lobby.uploaded = {p1, p2, p3}
+        lobby.votes = {p1: p2, p2: p1}
+        mgr.lobbies[lid] = lobby
+        mgr.player_lobby[p1] = lid
+        mgr.player_lobby[p2] = lid
+        mgr.player_lobby[p3] = lid
+
+        class FakeWS:
+            def __init__(self) -> None:
+                self.sent: list[str] = []
+
+            async def send_text(self, raw: str) -> None:
+                self.sent.append(raw)
+
+        ws1 = FakeWS()
+        ws2 = FakeWS()
+        mgr.attach_ws(p1, ws1)  # type: ignore[arg-type]
+        mgr.attach_ws(p2, ws2)  # type: ignore[arg-type]
+
+        await mgr.disconnect(p3)
+
+        payloads = [json.loads(s) for s in ws1.sent + ws2.sent]
+        assert any(p.get("type") == "results" for p in payloads)
+        assert lobby.state == LobbyState.RESULTS
+
+    asyncio.run(run())
+
+
+def test_disconnect_voting_two_players_nonvoter_leaves_finalizes_not_dissolve(
+    tmp_path: Path,
+) -> None:
+    """1v1 voting: if the non-voter leaves, finalize instead of lobby_dissolved."""
+
+    async def run() -> None:
+        mgr = LobbyManager(tmp_path)
+        lid = "VOTING02"
+        p1, p2 = "wP1aaaaaa", "wP2bbbbbb"
+        lobby = Lobby(id=lid, spice=0.5, is_public=True)
+        lobby.state = LobbyState.VOTING
+        lobby.votes_unlock_at = time.time() - 1.0
+        lobby.players[p1] = Player(id=p1, name="A", user_id=1, wins=0)
+        lobby.players[p2] = Player(id=p2, name="B", user_id=2, wins=0)
+        lobby.uploaded = {p1, p2}
+        lobby.votes = {p1: p2}
+        mgr.lobbies[lid] = lobby
+        mgr.player_lobby[p1] = lid
+        mgr.player_lobby[p2] = lid
+
+        class FakeWS:
+            def __init__(self) -> None:
+                self.sent: list[str] = []
+
+            async def send_text(self, raw: str) -> None:
+                self.sent.append(raw)
+
+        ws1 = FakeWS()
+        mgr.attach_ws(p1, ws1)  # type: ignore[arg-type]
+
+        await mgr.disconnect(p2)
+
+        payloads = [json.loads(s) for s in ws1.sent]
+        assert any(p.get("type") == "results" for p in payloads)
+        assert not any(p.get("type") == "lobby_dissolved" for p in payloads)
+        assert lobby.state == LobbyState.RESULTS
+
+    asyncio.run(run())
+
+
 def test_disconnect_cooking_rebroadcasts_cook_finished(tmp_path: Path) -> None:
     async def run() -> None:
         mgr = LobbyManager(tmp_path)
