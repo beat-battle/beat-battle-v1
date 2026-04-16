@@ -55,4 +55,9 @@ def rank_public_dict(wins: int) -> dict[str, Any] | None:
     r = rank_for_wins(wins)
     if r is None:
         return None
-    return {"key": r["key"], "abbrev": r["abbrev"], "label": r["label"], "color": r["color"]}
+    return {
+        "key": r["key"],
+        "abbrev": r["abbrev"],
+        "label": r["label"],
+        "color": r["color"],
+    }

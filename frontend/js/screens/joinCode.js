@@ -8,7 +8,12 @@ import { playSfxMajor, playSfxMinor } from "../sfx.js";
 import { mountMatchmakingScreen } from "./matchmaking.js";
 
 export function mountJoinCodeScreen(root, ctx) {
-  const displayName = (ctx.username || ctx.mpName || getUsername() || "Player").trim();
+  const displayName = (
+    ctx.username ||
+    ctx.mpName ||
+    getUsername() ||
+    "Player"
+  ).trim();
 
   setAppErrorContext({ screen: "Join by code", phase: "Enter lobby code" });
   mountAuthCornerLeave(ctx);
@@ -30,7 +35,9 @@ export function mountJoinCodeScreen(root, ctx) {
 
   root.querySelector("#jc-back")?.addEventListener("click", () => {
     playSfxMinor();
-    import("./multiplayerHub.js").then((m) => ctx.navigate(m.mountMultiplayerHubScreen));
+    import("./multiplayerHub.js").then((m) =>
+      ctx.navigate(m.mountMultiplayerHubScreen),
+    );
   });
 
   root.querySelector("#jc-go")?.addEventListener("click", () => {

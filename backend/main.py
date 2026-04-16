@@ -22,7 +22,16 @@ import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -74,8 +83,11 @@ def _index_html_response() -> HTMLResponse:
     path = FRONTEND_ROOT / "index.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="index.html not found.")
-    body = path.read_text(encoding="utf-8").replace("__STATIC_BUILD__", STATIC_ASSET_BUILD)
+    body = path.read_text(encoding="utf-8").replace(
+        "__STATIC_BUILD__", STATIC_ASSET_BUILD
+    )
     return HTMLResponse(content=body, headers={"Cache-Control": "no-cache"})
+
 
 MAX_BEAT_BYTES = 30 * 1024 * 1024
 
@@ -153,7 +165,9 @@ def _static_cache_control(path: str) -> str | None:
         return "public, max-age=0, must-revalidate"
     if path.startswith("/sfx/") or path.startswith("/media/"):
         return "public, max-age=86400"
-    if path.endswith((".css", ".woff2", ".svg", ".png", ".ico", ".webp", ".mp3", ".ogg")):
+    if path.endswith(
+        (".css", ".woff2", ".svg", ".png", ".ico", ".webp", ".mp3", ".ogg")
+    ):
         return "public, max-age=86400"
     if path == "/" or path.endswith(".html"):
         return "no-cache"
@@ -286,7 +300,9 @@ def delete_dev_supporter(
 
 
 @app.post("/register", response_model=RegisterResponse)
-def post_register(body: RegisterRequest, db: Session = Depends(get_db)) -> RegisterResponse:
+def post_register(
+    body: RegisterRequest, db: Session = Depends(get_db)
+) -> RegisterResponse:
     return register_user(db, body)
 
 
@@ -297,7 +313,11 @@ def post_login(body: LoginRequest, db: Session = Depends(get_db)) -> TokenRespon
 
 def _me_response_from_user(user: User) -> MeResponse:
     r = rank_for_wins(user.wins)
-    rank = RankInfo(key=r["key"], abbrev=r["abbrev"], label=r["label"], color=r["color"]) if r else None
+    rank = (
+        RankInfo(key=r["key"], abbrev=r["abbrev"], label=r["label"], color=r["color"])
+        if r
+        else None
+    )
     return MeResponse(
         username=user.username,
         wins=user.wins,
@@ -334,12 +354,7 @@ async def post_mp_abandon_reconnect(
 
 @app.get("/leaderboard", response_model=list[LeaderboardEntry])
 def get_leaderboard(db: Session = Depends(get_db)) -> list[LeaderboardEntry]:
-    rows = (
-        db.query(User)
-        .order_by(desc(User.wins), User.username)
-        .limit(50)
-        .all()
-    )
+    rows = db.query(User).order_by(desc(User.wins), User.username).limit(50).all()
     out: list[LeaderboardEntry] = []
     for r in rows:
         pub = rank_public_dict(r.wins)
@@ -454,7 +469,9 @@ async def upload_beat(
                     first_chunk = chunk[:64]
                 total += len(chunk)
                 if total > MAX_BEAT_BYTES:
-                    raise HTTPException(status_code=400, detail="File too large (max 30MB).")
+                    raise HTTPException(
+                        status_code=400, detail="File too large (max 30MB)."
+                    )
                 out.write(chunk)
 
         if total == 0:
@@ -462,7 +479,9 @@ async def upload_beat(
 
         sniffed = _sniff_audio(first_chunk or b"")
         if sniffed and sniffed != suffix:
-            raise HTTPException(status_code=400, detail="File content does not match extension.")
+            raise HTTPException(
+                status_code=400, detail="File content does not match extension."
+            )
 
         try:
             await asyncio.to_thread(
@@ -481,10 +500,14 @@ async def upload_beat(
                     status_code=503,
                     detail="Beat uploads require ffmpeg (libvorbis) on the server.",
                 ) from e
-            raise HTTPException(status_code=400, detail="Could not process audio file.") from e
+            raise HTTPException(
+                status_code=400, detail="Could not process audio file."
+            ) from e
         except Exception as e:
             dest.unlink(missing_ok=True)
-            raise HTTPException(status_code=400, detail="Could not process audio file.") from e
+            raise HTTPException(
+                status_code=400, detail="Could not process audio file."
+            ) from e
     except HTTPException:
         part.unlink(missing_ok=True)
         dest.unlink(missing_ok=True)

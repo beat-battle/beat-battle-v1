@@ -14,13 +14,17 @@ const AUTH_MENU_OPEN = "auth-corner-menu--open";
 function initAuthCornerAccountMenu(root) {
   const toggle = root.querySelector(".auth-corner-menu-toggle");
   const panel = root.querySelector("#auth-corner-menu-panel");
-  if (!(toggle instanceof HTMLButtonElement) || !(panel instanceof HTMLElement)) return;
+  if (!(toggle instanceof HTMLButtonElement) || !(panel instanceof HTMLElement))
+    return;
 
   const setOpen = (open) => {
     root.classList.toggle(AUTH_MENU_OPEN, open);
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
     panel.setAttribute("aria-hidden", open ? "false" : "true");
-    toggle.setAttribute("aria-label", open ? "Close account actions" : "Open account actions");
+    toggle.setAttribute(
+      "aria-label",
+      open ? "Close account actions" : "Open account actions",
+    );
     if (open) panel.removeAttribute("inert");
     else panel.setAttribute("inert", "");
   };
@@ -113,7 +117,8 @@ export function mountAuthCornerMenu(ctx, opts = {}) {
       if (nameEl) {
         nameEl.innerHTML = `${rankBadgeHtml(me.rank)}${supporterDisplayNameInnerHtml(me.username)}`;
       }
-      if (winsEl) winsEl.textContent = `${me.wins} ${me.wins === 1 ? "win" : "wins"}`;
+      if (winsEl)
+        winsEl.textContent = `${me.wins} ${me.wins === 1 ? "win" : "wins"}`;
     })
     .catch(() => {
       if (winsEl) winsEl.textContent = "";
@@ -123,12 +128,16 @@ export function mountAuthCornerMenu(ctx, opts = {}) {
     if (primary === "home") {
       el.querySelector("#auth-corner-home")?.addEventListener("click", () => {
         playSfxMinor();
-        import("./screens/modeSelect.js").then((m) => ctx.navigate(m.mountModeSelectScreen));
+        import("./screens/modeSelect.js").then((m) =>
+          ctx.navigate(m.mountModeSelectScreen),
+        );
       });
     } else {
       el.querySelector("#auth-corner-lb")?.addEventListener("click", () => {
         playSfxMajor();
-        import("./screens/leaderboardScreen.js").then((m) => ctx.navigate(m.mountLeaderboardScreen));
+        import("./screens/leaderboardScreen.js").then((m) =>
+          ctx.navigate(m.mountLeaderboardScreen),
+        );
       });
     }
   }
@@ -136,7 +145,9 @@ export function mountAuthCornerMenu(ctx, opts = {}) {
   el.querySelector("#auth-corner-out")?.addEventListener("click", () => {
     playSfxMinor();
     clearAuthSession();
-    import("./screens/modeSelect.js").then((m) => ctx.navigate(m.mountModeSelectScreen));
+    import("./screens/modeSelect.js").then((m) =>
+      ctx.navigate(m.mountModeSelectScreen),
+    );
   });
 
   const menuRoot = el.querySelector(".auth-corner-menu");
@@ -167,22 +178,30 @@ export function mountAuthCornerGuest(ctx, opts = {}) {
   if (showHome) {
     el.querySelector("#auth-corner-home")?.addEventListener("click", () => {
       playSfxMinor();
-      import("./screens/modeSelect.js").then((m) => ctx.navigate(m.mountModeSelectScreen));
+      import("./screens/modeSelect.js").then((m) =>
+        ctx.navigate(m.mountModeSelectScreen),
+      );
     });
   } else {
     el.querySelector("#auth-corner-lb")?.addEventListener("click", () => {
       playSfxMajor();
-      import("./screens/leaderboardScreen.js").then((m) => ctx.navigate(m.mountLeaderboardScreen));
+      import("./screens/leaderboardScreen.js").then((m) =>
+        ctx.navigate(m.mountLeaderboardScreen),
+      );
     });
   }
 
   el.querySelector("#auth-corner-login")?.addEventListener("click", () => {
     playSfxMinor();
-    import("./screens/loginScreen.js").then((m) => ctx.navigate(m.mountLoginScreen));
+    import("./screens/loginScreen.js").then((m) =>
+      ctx.navigate(m.mountLoginScreen),
+    );
   });
   el.querySelector("#auth-corner-reg")?.addEventListener("click", () => {
     playSfxMinor();
-    import("./screens/registerScreen.js").then((m) => ctx.navigate(m.mountRegisterScreen));
+    import("./screens/registerScreen.js").then((m) =>
+      ctx.navigate(m.mountRegisterScreen),
+    );
   });
 }
 
@@ -199,11 +218,15 @@ export function mountAuthCornerLoginGuest(ctx) {
   `;
   el.querySelector("#auth-corner-home")?.addEventListener("click", () => {
     playSfxMinor();
-    import("./screens/modeSelect.js").then((m) => ctx.navigate(m.mountModeSelectScreen));
+    import("./screens/modeSelect.js").then((m) =>
+      ctx.navigate(m.mountModeSelectScreen),
+    );
   });
   el.querySelector("#auth-corner-reg")?.addEventListener("click", () => {
     playSfxMinor();
-    import("./screens/registerScreen.js").then((m) => ctx.navigate(m.mountRegisterScreen));
+    import("./screens/registerScreen.js").then((m) =>
+      ctx.navigate(m.mountRegisterScreen),
+    );
   });
 }
 
@@ -220,11 +243,15 @@ export function mountAuthCornerRegisterGuest(ctx) {
   `;
   el.querySelector("#auth-corner-home")?.addEventListener("click", () => {
     playSfxMinor();
-    import("./screens/modeSelect.js").then((m) => ctx.navigate(m.mountModeSelectScreen));
+    import("./screens/modeSelect.js").then((m) =>
+      ctx.navigate(m.mountModeSelectScreen),
+    );
   });
   el.querySelector("#auth-corner-login")?.addEventListener("click", () => {
     playSfxMinor();
-    import("./screens/loginScreen.js").then((m) => ctx.navigate(m.mountLoginScreen));
+    import("./screens/loginScreen.js").then((m) =>
+      ctx.navigate(m.mountLoginScreen),
+    );
   });
 }
 
@@ -248,6 +275,8 @@ export function mountAuthCornerLeave(ctx) {
         /* ignore */
       }
     }
-    import("./screens/modeSelect.js").then((m) => ctx.navigate(m.mountModeSelectScreen));
+    import("./screens/modeSelect.js").then((m) =>
+      ctx.navigate(m.mountModeSelectScreen),
+    );
   });
 }

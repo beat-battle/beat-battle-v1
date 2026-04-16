@@ -6,7 +6,10 @@ import { getApiBase } from "../apiOrigin.js";
 import { setAppErrorContext } from "../errorToast.js";
 import { mountAuthCornerLeave } from "../authCorner.js";
 import { RANK_BASELINE_KEY, RANK_PENDING_KEY } from "../rankUi.js";
-import { dismissServerRestartingWait, showServerRestartingWait } from "../serverRestartOverlay.js";
+import {
+  dismissServerRestartingWait,
+  showServerRestartingWait,
+} from "../serverRestartOverlay.js";
 import { applyMatchResyncFromPayload } from "../mpMatchResync.js";
 import { runMpWsReconnect } from "../mpReconnect.js";
 import { clearMpSeat, saveMpSeat } from "../mpSeatStorage.js";
@@ -27,7 +30,8 @@ import { supporterDisplayNameInnerHtml } from "../supporters.js";
 
 function getWaveSurfer() {
   const g = globalThis;
-  if (g.WaveSurfer && typeof g.WaveSurfer.create === "function") return g.WaveSurfer;
+  if (g.WaveSurfer && typeof g.WaveSurfer.create === "function")
+    return g.WaveSurfer;
   throw new Error("WaveSurfer not loaded");
 }
 
@@ -105,7 +109,9 @@ export function mountResultsScreen(root, ctx) {
     winners.length > 0
       ? winners
           .map((w) => supporterDisplayNameInnerHtml(w))
-          .join('<span class="results-winner-sep" aria-hidden="true"> · </span>')
+          .join(
+            '<span class="results-winner-sep" aria-hidden="true"> · </span>',
+          )
       : "";
 
   const winnerBlock = noWinnerTwoPlayers
@@ -157,7 +163,11 @@ export function mountResultsScreen(root, ctx) {
   }));
 
   const syncRematchHint = () => {
-    setRematchProgressHint(root.querySelector("#results-rematch-hint"), rematchPlayers, rematchVoted);
+    setRematchProgressHint(
+      root.querySelector("#results-rematch-hint"),
+      rematchPlayers,
+      rematchVoted,
+    );
     const btn = root.querySelector("#results-rematch-btn");
     if (btn instanceof HTMLButtonElement && playerId) {
       btn.disabled = rematchVoted.has(playerId);
@@ -274,7 +284,12 @@ export function mountResultsScreen(root, ctx) {
 
   let unmountMpChat =
     ctx.mpWs instanceof WebSocket
-      ? mountMpChat({ ws: ctx.mpWs, getWs: () => ctx.mpWs, playerId, continueSession: true })
+      ? mountMpChat({
+          ws: ctx.mpWs,
+          getWs: () => ctx.mpWs,
+          playerId,
+          continueSession: true,
+        })
       : () => {};
 
   const onResultsSocketMessage = async (ev) => {
@@ -353,7 +368,11 @@ export function mountResultsScreen(root, ctx) {
   }
 
   root.querySelector("#results-rematch-btn")?.addEventListener("click", () => {
-    if (!(ctx.mpWs instanceof WebSocket) || ctx.mpWs.readyState !== WebSocket.OPEN) return;
+    if (
+      !(ctx.mpWs instanceof WebSocket) ||
+      ctx.mpWs.readyState !== WebSocket.OPEN
+    )
+      return;
     if (playerId && rematchVoted.has(playerId)) return;
     playSfxMinor();
     try {
@@ -369,7 +388,10 @@ export function mountResultsScreen(root, ctx) {
     clearMpChatSession();
     clearMpSeat();
     try {
-      if (ctx.mpWs instanceof WebSocket && ctx.mpWs.readyState === WebSocket.OPEN) {
+      if (
+        ctx.mpWs instanceof WebSocket &&
+        ctx.mpWs.readyState === WebSocket.OPEN
+      ) {
         ctx.mpWs.send(JSON.stringify({ type: "leave_lobby" }));
       }
     } catch {
@@ -398,7 +420,9 @@ export function mountResultsScreen(root, ctx) {
       /* ignore */
     }
     sessionStorage.removeItem(RANK_BASELINE_KEY);
-    import("./modeSelect.js").then((m) => ctx.navigate(m.mountModeSelectScreen));
+    import("./modeSelect.js").then((m) =>
+      ctx.navigate(m.mountModeSelectScreen),
+    );
   });
 
   return () => {

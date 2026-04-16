@@ -76,7 +76,9 @@ export async function registerUser(username, password) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.detail || data.message || res.statusText || "Register failed");
+    throw new Error(
+      data.detail || data.message || res.statusText || "Register failed",
+    );
   }
   return data;
 }
@@ -104,7 +106,7 @@ export async function loginUser(username, password) {
 export async function fetchLeaderboard() {
   const base = getApiBase();
   const res = await fetch(`${base}/leaderboard`);
-  if (!res.ok) throw new Error(await res.text() || res.statusText);
+  if (!res.ok) throw new Error((await res.text()) || res.statusText);
   return res.json();
 }
 
@@ -112,6 +114,6 @@ export async function fetchLeaderboard() {
 export async function fetchMe() {
   const base = getApiBase();
   const res = await fetch(`${base}/me`, { headers: authBearerOnly() });
-  if (!res.ok) throw new Error(await res.text() || res.statusText);
+  if (!res.ok) throw new Error((await res.text()) || res.statusText);
   return res.json();
 }

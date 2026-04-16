@@ -87,7 +87,11 @@ def test_rematch_migrates_to_new_lobby_and_broadcasts(tmp_path: Path) -> None:
 
         for ws in (ws1, ws2):
             payloads = [json.loads(s) for s in ws.sent]
-            assert any(p.get("type") == "lobby_update" and p.get("lobby", {}).get("state") == "lobby" for p in payloads)
+            assert any(
+                p.get("type") == "lobby_update"
+                and p.get("lobby", {}).get("state") == "lobby"
+                for p in payloads
+            )
 
     asyncio.run(run())
 

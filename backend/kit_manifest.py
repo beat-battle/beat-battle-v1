@@ -19,7 +19,12 @@ from pathlib import Path
 from typing import Any
 
 from .audio_utils import list_dataset_samples_in_dir
-from .generator import DATASET_ROOT, CATEGORY_FOLDERS, _LIGHT_KIT_KEYS, trap_synth_samples_dir
+from .generator import (
+    DATASET_ROOT,
+    CATEGORY_FOLDERS,
+    _LIGHT_KIT_KEYS,
+    trap_synth_samples_dir,
+)
 
 _PROJECT_ROOT = DATASET_ROOT.parent
 
@@ -50,7 +55,9 @@ def _validate_manifest_payload(data: Any) -> dict[str, Any]:
         raise ValueError("Invalid kit manifest JSON: 'keys' must be an object")
     for k in _LIGHT_KIT_KEYS:
         if k not in keys or not isinstance(keys[k], list):
-            raise ValueError(f"Invalid kit manifest JSON: missing or non-array keys[{k!r}]")
+            raise ValueError(
+                f"Invalid kit manifest JSON: missing or non-array keys[{k!r}]"
+            )
     return data
 
 

@@ -93,5 +93,7 @@ export function showMpReconnectMenuOverlay(pending, handlers) {
 
   tick();
   intervalId = window.setInterval(tick, 250);
-  requestAnimationFrame(() => el.classList.add("mp-reconnect-menu-overlay--visible"));
+  requestAnimationFrame(() =>
+    el.classList.add("mp-reconnect-menu-overlay--visible"),
+  );
 }

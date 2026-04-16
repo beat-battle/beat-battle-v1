@@ -96,7 +96,8 @@ export function mountMpResumeFromMenuScreen(root, ctx) {
             clearReconnectSuppress();
           } else {
             handedOffWs = false;
-            if (statusEl) statusEl.textContent = "Could not restore match state.";
+            if (statusEl)
+              statusEl.textContent = "Could not restore match state.";
             showAppError({
               message: "The server could not restore your match state.",
               hint: "Try multiplayer again from the main menu. The match may have ended.",

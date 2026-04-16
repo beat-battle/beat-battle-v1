@@ -5,8 +5,15 @@ import { authHeaders, fetchMe } from "../authApi.js";
 import { RANK_BASELINE_KEY } from "../rankUi.js";
 import { getApiBase } from "../apiOrigin.js";
 import { mountAuthCornerLeave } from "../authCorner.js";
-import { notifyMpServerError, setAppErrorContext, showAppError } from "../errorToast.js";
-import { dismissServerRestartingWait, showServerRestartingWait } from "../serverRestartOverlay.js";
+import {
+  notifyMpServerError,
+  setAppErrorContext,
+  showAppError,
+} from "../errorToast.js";
+import {
+  dismissServerRestartingWait,
+  showServerRestartingWait,
+} from "../serverRestartOverlay.js";
 import { applyMatchResyncFromPayload } from "../mpMatchResync.js";
 import { runMpWsReconnect } from "../mpReconnect.js";
 import { saveMpSeat } from "../mpSeatStorage.js";
@@ -35,7 +42,11 @@ import {
   updatePhaseTimerBar,
 } from "../mpMatchRoster.js";
 import { fetchMatchSync, pollMatchSync } from "../mpMatchSync.js";
-import { ingestMpChatMessage, mountMpChat, mpChatHandleErrorPayload } from "../mpChat.js";
+import {
+  ingestMpChatMessage,
+  mountMpChat,
+  mpChatHandleErrorPayload,
+} from "../mpChat.js";
 import { mountUploadScreen } from "./upload.js";
 import { mountVotingSlideshowScreen } from "./votingSlideshow.js";
 import { mountResultsScreen } from "./results.js";
@@ -80,7 +91,9 @@ async function downloadKitZip(sounds) {
   for (const key of SOUND_KEYS) {
     const b64 = sounds[key];
     if (!b64) continue;
-    folder.file(`${key}.${KIT_SOUND_FILE_EXT}`, base64ToBytes(b64), { binary: true });
+    folder.file(`${key}.${KIT_SOUND_FILE_EXT}`, base64ToBytes(b64), {
+      binary: true,
+    });
   }
   const blob = await zip.generateAsync({ type: "blob" });
   const url = URL.createObjectURL(blob);
@@ -110,7 +123,8 @@ function downloadOneSound(key, b64) {
 
 function getWaveSurfer() {
   const g = globalThis;
-  if (g.WaveSurfer && typeof g.WaveSurfer.create === "function") return g.WaveSurfer;
+  if (g.WaveSurfer && typeof g.WaveSurfer.create === "function")
+    return g.WaveSurfer;
   throw new Error("WaveSurfer not loaded");
 }
 
@@ -133,7 +147,8 @@ async function fetchLobbyKitMeta(ctx) {
     throw new Error(t || res.statusText);
   }
   const data = await res.json();
-  if (data.seed == null || data.spice == null) throw new Error("Invalid kit metadata.");
+  if (data.seed == null || data.spice == null)
+    throw new Error("Invalid kit metadata.");
   const ur = data.upload_deadline_ts;
   const vu = data.votes_unlock_at;
   const vc = data.votes_close_at;
@@ -142,14 +157,19 @@ async function fetchLobbyKitMeta(ctx) {
     spice: Number(data.spice),
     matchState: data.match_state != null ? String(data.match_state) : null,
     cookRemainingS:
-      data.cook_remaining_s != null && Number.isFinite(Number(data.cook_remaining_s))
+      data.cook_remaining_s != null &&
+      Number.isFinite(Number(data.cook_remaining_s))
         ? Math.max(0, Number(data.cook_remaining_s))
         : null,
-    uploadDeadlineTs: ur != null && Number.isFinite(Number(ur)) ? Number(ur) : null,
+    uploadDeadlineTs:
+      ur != null && Number.isFinite(Number(ur)) ? Number(ur) : null,
     beats: Array.isArray(data.beats) ? data.beats : null,
-    votesUnlockAt: vu != null && Number.isFinite(Number(vu)) ? Number(vu) : undefined,
-    votesCloseAt: vc != null && Number.isFinite(Number(vc)) ? Number(vc) : undefined,
-    results: data.results && typeof data.results === "object" ? data.results : null,
+    votesUnlockAt:
+      vu != null && Number.isFinite(Number(vu)) ? Number(vu) : undefined,
+    votesCloseAt:
+      vc != null && Number.isFinite(Number(vc)) ? Number(vc) : undefined,
+    results:
+      data.results && typeof data.results === "object" ? data.results : null,
   };
 }
 
@@ -237,7 +257,11 @@ async function buildKitClientSide(root, ctx, start, opts) {
           votesUnlockAt: sync.votes_unlock_at,
           votesCloseAt: sync.votes_close_at,
         });
-      } else if (st === "results" && sync.results && typeof sync.results === "object") {
+      } else if (
+        st === "results" &&
+        sync.results &&
+        typeof sync.results === "object"
+      ) {
         ctx.navigate(mountResultsScreen, {
           mpWs: ctx.mpWs,
           playerId: ctx.playerId,
@@ -379,7 +403,8 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
   const cookTotalSec = Math.max(1, cookMin * 60);
   /** @type {ReturnType<typeof normalizeLobbyLike>} */
   let lobbyView = normalizeLobbyLike({});
-  const syncProgressHint = () => syncMatchProgressHint(root, "mp-corner-cook", "cook", lobbyView);
+  const syncProgressHint = () =>
+    syncMatchProgressHint(root, "mp-corner-cook", "cook", lobbyView);
 
   void (async () => {
     const sync = await fetchMatchSync(String(lobbyId));
@@ -482,7 +507,11 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
     return card;
   };
 
-  if (grid) mountKitLayoutShell(grid, { synthKeys: SYNTH_KEYS, appendCard: appendCookCard });
+  if (grid)
+    mountKitLayoutShell(grid, {
+      synthKeys: SYNTH_KEYS,
+      appendCard: appendCookCard,
+    });
 
   clickFullPlayback.clear();
   SOUND_KEYS.forEach((key) => {
@@ -525,7 +554,8 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
   };
 
   const syncSelfCookFinishedFromLobby = () => {
-    if (!lobbyView.cook_finished.some((id) => String(id) === String(playerId))) return;
+    if (!lobbyView.cook_finished.some((id) => String(id) === String(playerId)))
+      return;
     if (selfFinished) return;
     selfFinished = true;
     setFinishedUi();
@@ -548,7 +578,8 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
   });
 
   grid?.addEventListener("click", (e) => {
-    const btn = e.target instanceof Element ? e.target.closest(".card-download") : null;
+    const btn =
+      e.target instanceof Element ? e.target.closest(".card-download") : null;
     if (!(btn instanceof HTMLButtonElement)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -696,7 +727,9 @@ export function mountCookScreen(root, ctx) {
   setAppErrorContext({ screen: "Cook", phase: "Cook phase — kit and timer" });
   const ws = ctx.mpWs;
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    import("./multiplayerHub.js").then((m) => ctx.navigate(m.mountMultiplayerHubScreen));
+    import("./multiplayerHub.js").then((m) =>
+      ctx.navigate(m.mountMultiplayerHubScreen),
+    );
     return () => {};
   }
 
@@ -705,7 +738,9 @@ export function mountCookScreen(root, ctx) {
   if (lid0 && pid0) saveMpSeat(lid0, pid0);
 
   void fetchMe()
-    .then((me) => sessionStorage.setItem(RANK_BASELINE_KEY, String(me.rank_index ?? 0)))
+    .then((me) =>
+      sessionStorage.setItem(RANK_BASELINE_KEY, String(me.rank_index ?? 0)),
+    )
     .catch(() => {});
 
   let cancelled = false;
@@ -858,7 +893,9 @@ export function mountCookScreen(root, ctx) {
           hint: "You were sent back to the multiplayer menu. Try rejoining if the match is still open.",
           errorCode: "KIT_SYNC",
         });
-        import("./multiplayerHub.js").then((m) => ctx.navigate(m.mountMultiplayerHubScreen));
+        import("./multiplayerHub.js").then((m) =>
+          ctx.navigate(m.mountMultiplayerHubScreen),
+        );
       }
     }
   })();

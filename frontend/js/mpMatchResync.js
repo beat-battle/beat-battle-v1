@@ -20,9 +20,12 @@ async function fetchKitMetaForResume(apiBase, lobbyId) {
   const lid = String(lobbyId || "").trim();
   if (!base || !lid) return null;
   try {
-    const res = await fetch(`${base}/api/lobby/${encodeURIComponent(lid)}/kit`, {
-      headers: authBearerOnly(),
-    });
+    const res = await fetch(
+      `${base}/api/lobby/${encodeURIComponent(lid)}/kit`,
+      {
+        headers: authBearerOnly(),
+      },
+    );
     if (!res.ok) return null;
     const data = await res.json();
     return data && typeof data === "object" ? data : null;
@@ -38,7 +41,8 @@ export async function applyMatchResyncFromPayload(ctx, m, screenId) {
   if (!lid || lid !== ctxLid) return false;
 
   const ws = ctx.mpWs;
-  if (!(ws instanceof WebSocket) || ws.readyState !== WebSocket.OPEN) return false;
+  if (!(ws instanceof WebSocket) || ws.readyState !== WebSocket.OPEN)
+    return false;
 
   const pid = String(ctx.playerId ?? "");
   const st = String(m.match_state ?? "");
@@ -116,16 +120,20 @@ export async function applyMatchResyncFromPayload(ctx, m, screenId) {
   }
 
   if (st === "voting") {
-    if (screenId === "voting_slideshow" || screenId === "vote_selection") return false;
+    if (screenId === "voting_slideshow" || screenId === "vote_selection")
+      return false;
     const vu = m.votes_unlock_at;
     const vc = m.votes_close_at;
-    const { mountVotingSlideshowScreen } = await import("./screens/votingSlideshow.js");
+    const { mountVotingSlideshowScreen } = await import(
+      "./screens/votingSlideshow.js"
+    );
     ctx.navigate(mountVotingSlideshowScreen, {
       mpWs: ws,
       playerId: pid,
       lobbyId: lid,
       beats: Array.isArray(m.beats) ? m.beats : [],
-      votesUnlockAt: typeof vu === "number" && Number.isFinite(vu) ? vu : undefined,
+      votesUnlockAt:
+        typeof vu === "number" && Number.isFinite(vu) ? vu : undefined,
       votesCloseAt:
         typeof vc === "number" && Number.isFinite(vc)
           ? vc
@@ -168,9 +176,13 @@ export function mergeMatchResyncIntoLobby(m, lobby) {
     is_public: m.is_public ?? lobby.is_public,
     state: m.state ?? st,
     host_id: m.host_id ?? lobby.host_id,
-    cook_duration_min: Number(m.cook_duration_min) || lobby.cook_duration_min || 10,
+    cook_duration_min:
+      Number(m.cook_duration_min) || lobby.cook_duration_min || 10,
     anonymous_voting: Boolean(m.anonymous_voting),
     players: Array.isArray(m.players) ? m.players : lobby.players || [],
-    drumkit: m.drumkit && typeof m.drumkit === "object" ? m.drumkit : lobby.drumkit || {},
+    drumkit:
+      m.drumkit && typeof m.drumkit === "object"
+        ? m.drumkit
+        : lobby.drumkit || {},
   };
 }

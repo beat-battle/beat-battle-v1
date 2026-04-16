@@ -15,7 +15,12 @@ const SPICES = [
 ];
 
 export function mountSpiceSelectScreen(root, ctx) {
-  const displayName = (ctx.username || ctx.mpName || getUsername() || "Player").trim();
+  const displayName = (
+    ctx.username ||
+    ctx.mpName ||
+    getUsername() ||
+    "Player"
+  ).trim();
 
   setAppErrorContext({ screen: "Heat level", phase: "Before creating lobby" });
   mountAuthCornerLeave(ctx);
@@ -89,7 +94,9 @@ export function mountSpiceSelectScreen(root, ctx) {
 
   root.querySelector("#spice-back")?.addEventListener("click", () => {
     playSfxMinor();
-    import("./multiplayerHub.js").then((m) => ctx.navigate(m.mountMultiplayerHubScreen));
+    import("./multiplayerHub.js").then((m) =>
+      ctx.navigate(m.mountMultiplayerHubScreen),
+    );
   });
 
   confirm?.addEventListener("click", () => {

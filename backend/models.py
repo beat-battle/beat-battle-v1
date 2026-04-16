@@ -16,10 +16,14 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    username: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    username: Mapped[str] = mapped_column(
+        String(32), unique=True, index=True, nullable=False
+    )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     wins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
 
 
 class SiteStats(Base):
@@ -37,5 +41,9 @@ class Supporter(Base):
     __tablename__ = "supporters"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name_key: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    name_key: Mapped[str] = mapped_column(
+        String(64), unique=True, index=True, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )

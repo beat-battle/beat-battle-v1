@@ -169,7 +169,10 @@ input.lobby-code-input {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
   background: #141414;
   color: var(--text-heading);
 }
@@ -244,7 +247,9 @@ input.lobby-code-input {
   background: #0c0c0c;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 0;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .card-download:hover {
@@ -398,7 +403,8 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   right: 0;
   bottom: 0;
   z-index: 65;
-  padding: 0.5rem clamp(0.65rem, 3vw, 1.25rem) max(0.5rem, env(safe-area-inset-bottom, 0px));
+  padding: 0.5rem clamp(0.65rem, 3vw, 1.25rem)
+    max(0.5rem, env(safe-area-inset-bottom, 0px));
   pointer-events: none;
 }
 
@@ -921,7 +927,10 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
   background: #141414;
   color: var(--text-heading);
 }
@@ -1022,7 +1031,9 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   cursor: pointer;
   image-rendering: pixelated;
   flex-shrink: 0;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .arcade-back:hover {
@@ -1163,7 +1174,7 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
 .lobby-code-input {
   text-transform: uppercase;
   letter-spacing: 0.1em;
-   font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums;
 }
 
 .arcade-input {
@@ -1200,7 +1211,10 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   border-radius: 0;
   background: #141414;
   cursor: pointer;
-  transition: border-color 0.15s ease, opacity 0.15s ease, filter 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    opacity 0.15s ease,
+    filter 0.15s ease;
 }
 
 .spice-card:not(.spice-card--active) {
@@ -1514,7 +1528,9 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   color: var(--text-heading);
   cursor: pointer;
   border-radius: 0;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .lobby-emoji-btn:hover {
@@ -1595,7 +1611,9 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   transform: rotate(45deg);
   opacity: 0.55;
   margin-top: -0.2em;
-  transition: transform 0.18s ease, opacity 0.18s ease;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease;
 }
 
 .lobby-settings[open] .lobby-settings-chevron {
@@ -1644,7 +1662,9 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   background: rgba(0, 0, 0, 0.35);
   border-radius: 999px;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .lobby-toggle:hover {
@@ -1776,7 +1796,9 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   color: var(--text-heading);
   cursor: pointer;
   border-radius: 0;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .slideshow-reaction-btn:hover {
@@ -2036,7 +2058,9 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
 
 .vote-beat-card {
   cursor: pointer;
-  transition: border-color 0.15s ease, opacity 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    opacity 0.15s ease;
 }
 
 .vote-beat-card:focus-visible {
@@ -2345,15 +2369,21 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
 }
 
 /* Closing: hide last → first (mirror of open) */
-.corner-social-menu:not(.corner-social-menu--open) .corner-social-menu__inner > *:nth-child(1) {
+.corner-social-menu:not(.corner-social-menu--open)
+  .corner-social-menu__inner
+  > *:nth-child(1) {
   transition-delay: 0.2s;
 }
 
-.corner-social-menu:not(.corner-social-menu--open) .corner-social-menu__inner > *:nth-child(2) {
+.corner-social-menu:not(.corner-social-menu--open)
+  .corner-social-menu__inner
+  > *:nth-child(2) {
   transition-delay: 0.1s;
 }
 
-.corner-social-menu:not(.corner-social-menu--open) .corner-social-menu__inner > *:nth-child(3) {
+.corner-social-menu:not(.corner-social-menu--open)
+  .corner-social-menu__inner
+  > *:nth-child(3) {
   transition-delay: 0s;
 }
 
@@ -2402,14 +2432,22 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
     transition-delay: 0s;
   }
 
-  .corner-social-menu:not(.corner-social-menu--open) .corner-social-menu__inner > *:nth-child(1),
-  .corner-social-menu:not(.corner-social-menu--open) .corner-social-menu__inner > *:nth-child(2),
-  .corner-social-menu:not(.corner-social-menu--open) .corner-social-menu__inner > *:nth-child(3) {
+  .corner-social-menu:not(.corner-social-menu--open)
+    .corner-social-menu__inner
+    > *:nth-child(1),
+  .corner-social-menu:not(.corner-social-menu--open)
+    .corner-social-menu__inner
+    > *:nth-child(2),
+  .corner-social-menu:not(.corner-social-menu--open)
+    .corner-social-menu__inner
+    > *:nth-child(3) {
     transition-delay: 0s;
   }
 
   .corner-social-menu--open .corner-social-menu__inner > .corner-social-link,
-  .corner-social-menu--open .corner-social-menu__inner > .corner-social-trigger {
+  .corner-social-menu--open
+    .corner-social-menu__inner
+    > .corner-social-trigger {
     opacity: 1;
     transform: none;
     transition-delay: 0s;
@@ -2434,7 +2472,10 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   backdrop-filter: blur(8px);
   color: var(--text-muted);
   text-decoration: none;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
 }
 
 .corner-social-link:hover {
@@ -2465,7 +2506,10 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   color: var(--text-muted);
   font-family: inherit;
   text-transform: uppercase;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
 }
 
 .corner-social-trigger:hover {
@@ -2612,11 +2656,15 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   transition-delay: 0.1s;
 }
 
-.auth-corner-menu:not(.auth-corner-menu--open) .auth-corner-menu__inner > *:nth-child(1) {
+.auth-corner-menu:not(.auth-corner-menu--open)
+  .auth-corner-menu__inner
+  > *:nth-child(1) {
   transition-delay: 0.1s;
 }
 
-.auth-corner-menu:not(.auth-corner-menu--open) .auth-corner-menu__inner > *:nth-child(2) {
+.auth-corner-menu:not(.auth-corner-menu--open)
+  .auth-corner-menu__inner
+  > *:nth-child(2) {
   transition-delay: 0s;
 }
 
@@ -2727,8 +2775,12 @@ button.auth-corner-card.auth-corner-menu-toggle {
     transition-duration: 0.01ms;
   }
 
-  .auth-corner-menu:not(.auth-corner-menu--open) .auth-corner-menu__inner > *:nth-child(1),
-  .auth-corner-menu:not(.auth-corner-menu--open) .auth-corner-menu__inner > *:nth-child(2) {
+  .auth-corner-menu:not(.auth-corner-menu--open)
+    .auth-corner-menu__inner
+    > *:nth-child(1),
+  .auth-corner-menu:not(.auth-corner-menu--open)
+    .auth-corner-menu__inner
+    > *:nth-child(2) {
     transition-delay: 0s;
   }
 
@@ -2812,7 +2864,10 @@ button.auth-corner-card.auth-corner-menu-toggle {
   text-orientation: mixed;
   transform: rotate(180deg);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .dev-stats-panel__tab:hover {
@@ -3098,7 +3153,7 @@ button.auth-corner-card.auth-corner-menu-toggle {
   display: inline-flex;
   align-items: center;
   vertical-align: middle;
-  margin-right: 0.30em;
+  margin-right: 0.3em;
   line-height: 0;
 }
 
@@ -3160,7 +3215,8 @@ button.auth-corner-card.auth-corner-menu-toggle {
     color-mix(in srgb, var(--rank-up-accent, #cd7f32) 42%, #1a1a1a) 0%,
     #141414 100%
   );
-  border: 1px solid color-mix(in srgb, var(--rank-up-accent, #cd7f32) 55%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--rank-up-accent, #cd7f32) 55%, transparent);
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.06),
     0 18px 48px rgba(0, 0, 0, 0.45);

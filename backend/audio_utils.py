@@ -53,7 +53,9 @@ def list_category_wavs(category_dir: Path) -> list[Path]:
     return list_dataset_samples_in_dir(category_dir)
 
 
-def load_random_sample(category_dir: Path, rng: np.random.Generator) -> tuple[np.ndarray, int]:
+def load_random_sample(
+    category_dir: Path, rng: np.random.Generator
+) -> tuple[np.ndarray, int]:
     """
     Pick one random ``.wav`` from ``category_dir``, load as mono at ``SAMPLE_RATE``.
 
@@ -162,7 +164,9 @@ def _to_mono(y: np.ndarray) -> np.ndarray:
     return x.reshape(-1)
 
 
-def align_length(a: np.ndarray, b: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+def align_length(
+    a: np.ndarray, b: np.ndarray, rng: np.random.Generator
+) -> tuple[np.ndarray, np.ndarray]:
     """Trim/pad two mono buffers to the same length."""
     a = _to_mono(a)
     b = _to_mono(b)
@@ -180,7 +184,9 @@ def align_length(a: np.ndarray, b: np.ndarray, rng: np.random.Generator) -> tupl
     return a.astype(np.float64), b.astype(np.float64)
 
 
-def layer_samples(audio1: np.ndarray, audio2: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+def layer_samples(
+    audio1: np.ndarray, audio2: np.ndarray, rng: np.random.Generator
+) -> np.ndarray:
     """
     Mix two buffers with a random primary/secondary balance (keeps transients from both
     audible without a fixed 50/50 blend).
@@ -336,7 +342,9 @@ def apply_saturation(audio: np.ndarray, spice: float) -> np.ndarray:
     return np.tanh(x * g)
 
 
-def apply_distortion_extra(audio: np.ndarray, spice: float, rng: np.random.Generator) -> np.ndarray:
+def apply_distortion_extra(
+    audio: np.ndarray, spice: float, rng: np.random.Generator
+) -> np.ndarray:
     """Optional second, slightly harder stage for perc/synth/fx/vox when roll succeeds."""
     x = _to_mono(audio).astype(np.float64, copy=True)
     if rng.random() > 0.25 + 0.55 * float(np.clip(spice, 0.0, 1.0)):
@@ -345,7 +353,9 @@ def apply_distortion_extra(audio: np.ndarray, spice: float, rng: np.random.Gener
     return np.tanh(x * drive)
 
 
-def transient_boost(audio: np.ndarray, spice: float, rng: np.random.Generator) -> np.ndarray:
+def transient_boost(
+    audio: np.ndarray, spice: float, rng: np.random.Generator
+) -> np.ndarray:
     """
     Emphasize the first ~1k samples for snare/clap attack so layered sources still punch
     in a trap mix.
@@ -359,13 +369,17 @@ def transient_boost(audio: np.ndarray, spice: float, rng: np.random.Generator) -
     return x
 
 
-def stereo_widen(audio: np.ndarray, spice: float, rng: np.random.Generator) -> np.ndarray:
+def stereo_widen(
+    audio: np.ndarray, spice: float, rng: np.random.Generator
+) -> np.ndarray:
     """
     Mono → stereo with small L/R gain offset; width scales mildly with spice.
     Used for hats, open hats, claps, percs when the roll passes.
     """
     x = _to_mono(audio).astype(np.float64, copy=True)
-    w = (0.02 + float(rng.uniform(0.0, 0.04))) * (1.0 + 0.5 * float(np.clip(spice, 0.0, 1.0)))
+    w = (0.02 + float(rng.uniform(0.0, 0.04))) * (
+        1.0 + 0.5 * float(np.clip(spice, 0.0, 1.0))
+    )
     if rng.random() < 0.5:
         w = -w
     left = x * (1.0 + w)
@@ -450,14 +464,25 @@ def fit_to_target_length(
 
         if n < target and n > 0:
             ratio = target / n
-            sustained = cat in ("808", "open_hat", "fx", "vox", "synth", "synth1", "synth2", "synth3")
+            sustained = cat in (
+                "808",
+                "open_hat",
+                "fx",
+                "vox",
+                "synth",
+                "synth1",
+                "synth2",
+                "synth3",
+            )
             if sustained and ratio <= 1.35:
                 # Small stretch sounds natural for sustained sounds.
                 rate = float(np.clip(1.0 / ratio, 0.75, 1.15))
                 z2 = z
                 if z2.shape[0] < 2048:
                     z2 = np.pad(z2, (0, 2048 - z2.shape[0]))
-                z = np.asarray(librosa.effects.time_stretch(z2, rate=rate), dtype=np.float64)
+                z = np.asarray(
+                    librosa.effects.time_stretch(z2, rate=rate), dtype=np.float64
+                )
                 if z.shape[0] > target:
                     z = z[:target]
                 n = z.shape[0]
@@ -615,7 +640,17 @@ def _category_flatness_threshold(category: str) -> float:
         return 0.82
     if c == "fx":
         return 0.75
-    if c in ("snare", "clap", "perc", "vox", "kick", "synth", "synth1", "synth2", "synth3"):
+    if c in (
+        "snare",
+        "clap",
+        "perc",
+        "vox",
+        "kick",
+        "synth",
+        "synth1",
+        "synth2",
+        "synth3",
+    ):
         return 0.55
     if c == "808":
         return 0.35

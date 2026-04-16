@@ -26,6 +26,7 @@ def canonical_spice(value: float) -> float | None:
             return a
     return None
 
+
 COOK_DURATION_S = 600
 # Host-selectable cook length (minutes); UI/backend clamp to these values.
 COOK_DURATION_MIN_OPTIONS: tuple[int, ...] = (5, 10, 15, 20, 30)
@@ -36,8 +37,8 @@ UPLOAD_PHASE_S = 120
 SLIDESHOW_SEGMENT_S = 46
 # Stored/downloaded beat length cap; matches frontend CLIP_MAX_SEC (voting_slideshow.js).
 BEAT_MAX_PLAYBACK_S = 45
-# Max time to collect votes after unlock.
-VOTING_COLLECT_S = 30
+# Max time to collect votes after the slideshow unlocks (1 minute).
+VOTING_COLLECT_S = 60
 # Lobbies in results older than this are purged (uploads deleted).
 LOBBY_RESULTS_TTL_S = 3600
 

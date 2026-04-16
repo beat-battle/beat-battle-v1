@@ -44,7 +44,9 @@ def pick_index(seed: int, slot_index: int, spice: float, n: int) -> int:
     if n <= 0:
         raise ValueError("n must be positive")
     spice_bits = _float32_bits(spice)
-    s0 = (seed ^ (slot_index * 1_000_003) ^ spice_bits ^ ((slot_index << 16) & 0xFFFFFFFF)) & 0xFFFFFFFF
+    s0 = (
+        seed ^ (slot_index * 1_000_003) ^ spice_bits ^ ((slot_index << 16) & 0xFFFFFFFF)
+    ) & 0xFFFFFFFF
     _state, r = _mulberry32_u32(s0)
     idx = int(r * n)
     if idx >= n:

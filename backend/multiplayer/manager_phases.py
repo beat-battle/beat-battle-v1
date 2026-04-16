@@ -50,7 +50,8 @@ async def cook_loop(manager: LobbyManager, lobby_id: str) -> None:
         if not lobby:
             return
         duration_s = max(
-            60, min(max(COOK_DURATION_MIN_OPTIONS) * 60, int(lobby.cook_duration_min) * 60)
+            60,
+            min(max(COOK_DURATION_MIN_OPTIONS) * 60, int(lobby.cook_duration_min) * 60),
         )
         lobby.cook_deadline_ts = time.time() + duration_s
         lobby.upload_deadline_ts = None
@@ -73,7 +74,9 @@ async def cook_loop(manager: LobbyManager, lobby_id: str) -> None:
                     return
                 # Advance when everyone still connected has finished — don't block on soft-DC seats.
                 connected = {
-                    pid for pid in lobby.players if manager.player_ws.get(pid) is not None
+                    pid
+                    for pid in lobby.players
+                    if manager.player_ws.get(pid) is not None
                 }
                 if (
                     len(lobby.players) > 0
@@ -127,7 +130,9 @@ async def cook_loop(manager: LobbyManager, lobby_id: str) -> None:
     )
 
 
-async def upload_phase(manager: LobbyManager, lobby_id: str, deadline_ts: float) -> None:
+async def upload_phase(
+    manager: LobbyManager, lobby_id: str, deadline_ts: float
+) -> None:
     try:
         while time.time() < deadline_ts:
             async with manager._lock:
@@ -188,7 +193,9 @@ async def begin_voting(manager: LobbyManager, lobby_id: str) -> None:
 
     if lobby_id in manager._vote_tasks:
         manager._vote_tasks[lobby_id].cancel()
-    manager._vote_tasks[lobby_id] = asyncio.create_task(vote_collection_loop(manager, lobby_id))
+    manager._vote_tasks[lobby_id] = asyncio.create_task(
+        vote_collection_loop(manager, lobby_id)
+    )
 
 
 async def vote_collection_loop(manager: LobbyManager, lobby_id: str) -> None:
@@ -242,7 +249,9 @@ async def finalize_results(manager: LobbyManager, lobby_id: str) -> None:
         lobby.state = LobbyState.RESULTS
         lobby.results_at = time.time()
         lobby.rematch_pending.clear()
-        payload, winner_user_ids = results_ws_payload_and_winner_user_ids(lobby, lobby_id)
+        payload, winner_user_ids = results_ws_payload_and_winner_user_ids(
+            lobby, lobby_id
+        )
         winners = list(payload.get("winner_ids") or [])
 
     if payload is None:

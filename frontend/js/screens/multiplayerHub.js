@@ -86,17 +86,26 @@ export function mountMultiplayerHubScreen(root, ctx) {
     root.querySelector("#mp-create")?.addEventListener("click", () => {
       if (hubBlocked) return;
       playSfxMajor();
-      ctx.navigate(mountSpiceSelectScreen, { mpName: displayName, username: displayName });
+      ctx.navigate(mountSpiceSelectScreen, {
+        mpName: displayName,
+        username: displayName,
+      });
     });
     root.querySelector("#mp-browse")?.addEventListener("click", () => {
       if (hubBlocked) return;
       playSfxMajor();
-      ctx.navigate(mountServerBrowserScreen, { mpName: displayName, username: displayName });
+      ctx.navigate(mountServerBrowserScreen, {
+        mpName: displayName,
+        username: displayName,
+      });
     });
     root.querySelector("#mp-join-code")?.addEventListener("click", () => {
       if (hubBlocked) return;
       playSfxMajor();
-      ctx.navigate(mountJoinCodeScreen, { mpName: displayName, username: displayName });
+      ctx.navigate(mountJoinCodeScreen, {
+        mpName: displayName,
+        username: displayName,
+      });
     });
 
     if (hubBlocked) {

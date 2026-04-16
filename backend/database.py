@@ -30,6 +30,7 @@ DATABASE_URL = _resolve_database_url()
 
 _IS_SQLITE = DATABASE_URL.startswith("sqlite")
 
+
 # PostgreSQL (e.g. Neon): pool defaults; override via env if you scale Render instances
 # (each process has its own pool — total connections ≈ instances × (pool_size + max_overflow)).
 def _pg_pool_kw() -> dict:

@@ -20,7 +20,10 @@ export function mountServerBrowserScreen(root, ctx) {
   const name = (ctx.username || ctx.mpName || getUsername() || "Player").trim();
   let pollId = 0;
 
-  setAppErrorContext({ screen: "Server browser", phase: "Public lobbies list" });
+  setAppErrorContext({
+    screen: "Server browser",
+    phase: "Public lobbies list",
+  });
   mountAuthCornerLeave(ctx);
 
   root.innerHTML = `
@@ -43,7 +46,8 @@ export function mountServerBrowserScreen(root, ctx) {
     try {
       const base = getApiBase();
       const res = await fetch(`${base}/api/lobbies`);
-      if (!res.ok) throw new Error(`${res.status} ${await res.text()} (${base})`);
+      if (!res.ok)
+        throw new Error(`${res.status} ${await res.text()} (${base})`);
       const rows = await res.json();
       if (!Array.isArray(rows) || rows.length === 0) {
         if (tableEl) {
@@ -68,7 +72,8 @@ export function mountServerBrowserScreen(root, ctx) {
       `,
         )
         .join("");
-      if (tableEl) tableEl.innerHTML = `<div class="server-table">${header}${body}</div>`;
+      if (tableEl)
+        tableEl.innerHTML = `<div class="server-table">${header}${body}</div>`;
       tableEl?.querySelectorAll(".server-join-btn").forEach((btn) => {
         btn.addEventListener("click", (e) => {
           const el = /** @type {HTMLElement} */ (e.currentTarget);
@@ -87,7 +92,8 @@ export function mountServerBrowserScreen(root, ctx) {
       if (statusEl) statusEl.textContent = "Updated";
     } catch (e) {
       if (statusEl)
-        statusEl.textContent = e instanceof Error ? e.message : "Could not load list";
+        statusEl.textContent =
+          e instanceof Error ? e.message : "Could not load list";
     }
   };
 
@@ -96,7 +102,9 @@ export function mountServerBrowserScreen(root, ctx) {
 
   root.querySelector("#sb-back")?.addEventListener("click", () => {
     playSfxMinor();
-    import("./multiplayerHub.js").then((m) => ctx.navigate(m.mountMultiplayerHubScreen));
+    import("./multiplayerHub.js").then((m) =>
+      ctx.navigate(m.mountMultiplayerHubScreen),
+    );
   });
 
   return () => {

@@ -23,7 +23,9 @@ export function resetAppErrorContext() {
 }
 
 /** Merge labels for where the user was (lobby phase, screen name, etc.). */
-export function setAppErrorContext(/** @type {Partial<AppErrorContext>} */ partial) {
+export function setAppErrorContext(
+  /** @type {Partial<AppErrorContext>} */ partial,
+) {
   appErrorContext = { ...appErrorContext, ...partial };
 }
 
@@ -51,7 +53,9 @@ function buildCopyReport(merged) {
     `Time (UTC): ${new Date().toISOString()}`,
   ];
   try {
-    const u = new URL(typeof location !== "undefined" ? location.href : "about:blank");
+    const u = new URL(
+      typeof location !== "undefined" ? location.href : "about:blank",
+    );
     lines.push(`Page: ${u.origin}${u.pathname}`);
   } catch {
     lines.push("Page: (unavailable)");
@@ -87,7 +91,10 @@ function buildCopyReport(merged) {
 
 async function copyText(text) {
   try {
-    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    if (
+      navigator.clipboard &&
+      typeof navigator.clipboard.writeText === "function"
+    ) {
       await navigator.clipboard.writeText(text);
       return true;
     }
@@ -183,7 +190,8 @@ export function showAppError(detail) {
   if (metaParts.length) {
     meta.textContent = `${metaParts.join(" · ")} — use Copy details if you report this.`;
   } else {
-    meta.textContent = "Use Copy details to share what went wrong with the developer.";
+    meta.textContent =
+      "Use Copy details to share what went wrong with the developer.";
   }
   card.appendChild(meta);
 

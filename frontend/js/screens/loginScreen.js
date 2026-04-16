@@ -51,7 +51,8 @@ export function mountLoginScreen(root, ctx) {
       initDevStatsPanel();
       ctx.navigate(mountModeSelectScreen);
     } catch (e) {
-      if (err) err.textContent = e instanceof Error ? e.message : "Login failed.";
+      if (err)
+        err.textContent = e instanceof Error ? e.message : "Login failed.";
     }
   });
 

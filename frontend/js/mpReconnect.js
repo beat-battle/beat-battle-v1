@@ -4,7 +4,10 @@
 import { validateSession } from "./authApi.js";
 import { getWsUrl } from "./apiOrigin.js";
 import { getStoredMpLobbyId, getStoredMpPlayerId } from "./mpSeatStorage.js";
-import { showMpReconnectBanner, hideMpReconnectBanner } from "./mpReconnectBanner.js";
+import {
+  showMpReconnectBanner,
+  hideMpReconnectBanner,
+} from "./mpReconnectBanner.js";
 import { showServerRestartingWait } from "./serverRestartOverlay.js";
 
 const MAX_ATTEMPTS = 15;
@@ -58,7 +61,9 @@ export async function runMpWsReconnect(ev, opts) {
   const pid = getStoredMpPlayerId();
   if (!lid || !pid) {
     showServerRestartingWait();
-    import("./screens/multiplayerHub.js").then((m) => opts.ctx.navigate(m.mountMultiplayerHubScreen));
+    import("./screens/multiplayerHub.js").then((m) =>
+      opts.ctx.navigate(m.mountMultiplayerHubScreen),
+    );
     return;
   }
 
@@ -67,11 +72,14 @@ export async function runMpWsReconnect(ev, opts) {
     const sessionOk = await validateSession();
     if (!sessionOk) {
       hideMpReconnectBanner();
-      import("./screens/modeSelect.js").then((mod) => opts.ctx.navigate(mod.mountModeSelectScreen));
+      import("./screens/modeSelect.js").then((mod) =>
+        opts.ctx.navigate(mod.mountModeSelectScreen),
+      );
       return;
     }
 
-    const delay = Math.min(14_000, BASE_DELAY_MS * 2 ** (attempt - 1)) + jitter();
+    const delay =
+      Math.min(14_000, BASE_DELAY_MS * 2 ** (attempt - 1)) + jitter();
     await new Promise((r) => window.setTimeout(r, delay));
 
     if (opts.intentionalLeave() || opts.preserveWs()) {
@@ -135,5 +143,7 @@ export async function runMpWsReconnect(ev, opts) {
 
   hideMpReconnectBanner();
   showServerRestartingWait();
-  import("./screens/multiplayerHub.js").then((m) => opts.ctx.navigate(m.mountMultiplayerHubScreen));
+  import("./screens/multiplayerHub.js").then((m) =>
+    opts.ctx.navigate(m.mountMultiplayerHubScreen),
+  );
 }

@@ -41,7 +41,8 @@ export function mountLeaderboardScreen(root, ctx) {
     .then((rows) => {
       if (statusEl) statusEl.textContent = "";
       if (!Array.isArray(rows) || rows.length === 0) {
-        if (tableWrap) tableWrap.innerHTML = `<p class="arcade-hint">No players yet.</p>`;
+        if (tableWrap)
+          tableWrap.innerHTML = `<p class="arcade-hint">No players yet.</p>`;
         return;
       }
       const head = `
@@ -58,10 +59,13 @@ export function mountLeaderboardScreen(root, ctx) {
         </div>`,
         )
         .join("");
-      if (tableWrap) tableWrap.innerHTML = `<div class="leaderboard-table">${head}${body}</div>`;
+      if (tableWrap)
+        tableWrap.innerHTML = `<div class="leaderboard-table">${head}${body}</div>`;
     })
     .catch((e) => {
-      if (statusEl) statusEl.textContent = e instanceof Error ? e.message : "Could not load.";
+      if (statusEl)
+        statusEl.textContent =
+          e instanceof Error ? e.message : "Could not load.";
     });
 
   return () => {

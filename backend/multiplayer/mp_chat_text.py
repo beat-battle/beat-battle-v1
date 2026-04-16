@@ -30,9 +30,13 @@ def normalize_and_validate_mp_chat_text(raw: object) -> tuple[str | None, str | 
     text = str(raw).strip()
     if not text:
         return None, "Empty message."
-    if len(text) > MP_CHAT_MAX_LEN: # If the message length is greater than 300 chars - Should be more than fine for now
+    if (
+        len(text) > MP_CHAT_MAX_LEN
+    ):  # If the message length is greater than 300 chars - Should be more than fine for now
         return None, "Message too long."
-    if not _ASCII_PRINTABLE.fullmatch(text): # If the message still contains non ascii even after being sanitized
+    if not _ASCII_PRINTABLE.fullmatch(
+        text
+    ):  # If the message still contains non ascii even after being sanitized
         return None, "Only ASCII characters allowed."
     if _URL_SCHEMES.search(text) or _WWW.search(text) or _HOST_TLD.search(text):
         return None, "URLs are not allowed."

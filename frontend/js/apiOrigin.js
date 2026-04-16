@@ -18,7 +18,10 @@ function readMetaCdnBase() {
 }
 
 /** Production game hostnames → default R2 public URL when meta is missing (deploy safety net). */
-const DEFAULT_CDN_FOR_HOSTNAMES = new Set(["beat-battle.net", "www.beat-battle.net"]);
+const DEFAULT_CDN_FOR_HOSTNAMES = new Set([
+  "beat-battle.net",
+  "www.beat-battle.net",
+]);
 const DEFAULT_CDN_BASE = "https://assets.beat-battle.net";
 
 /**

@@ -88,7 +88,8 @@ function ensureEl() {
   if (!el) {
     el = document.createElement("div");
     el.id = "dev-stats-panel";
-    el.className = "dev-stats-panel dev-stats-panel--collapsed dev-stats-panel--concealed";
+    el.className =
+      "dev-stats-panel dev-stats-panel--collapsed dev-stats-panel--concealed";
     el.setAttribute("aria-label", "Developer stats");
     el.innerHTML = `
       <div class="dev-stats-panel__card" id="dev-stats-card">
@@ -225,7 +226,9 @@ async function fetchOnce() {
     return;
   }
   const base = getApiBase();
-  const res = await fetch(`${base}/api/dev/site-stats`, { headers: authBearerOnly() });
+  const res = await fetch(`${base}/api/dev/site-stats`, {
+    headers: authBearerOnly(),
+  });
   if (res.status === 401 || res.status === 403) {
     teardown();
     return;

@@ -4,7 +4,10 @@
 import { authHeadersMultipart } from "../authApi.js";
 import { getApiBase } from "../apiOrigin.js";
 import { notifyMpServerError, setAppErrorContext } from "../errorToast.js";
-import { dismissServerRestartingWait, showServerRestartingWait } from "../serverRestartOverlay.js";
+import {
+  dismissServerRestartingWait,
+  showServerRestartingWait,
+} from "../serverRestartOverlay.js";
 import { applyMatchResyncFromPayload } from "../mpMatchResync.js";
 import { runMpWsReconnect } from "../mpReconnect.js";
 import { saveMpSeat } from "../mpSeatStorage.js";
@@ -16,7 +19,11 @@ import {
 } from "../mpPresenceToast.js";
 import { mountAuthCornerLeave } from "../authCorner.js";
 import { supporterDisplayNameInnerHtml } from "../supporters.js";
-import { ingestMpChatMessage, mountMpChat, mpChatHandleErrorPayload } from "../mpChat.js";
+import {
+  ingestMpChatMessage,
+  mountMpChat,
+  mpChatHandleErrorPayload,
+} from "../mpChat.js";
 import {
   applyMatchWsToLobby,
   lobbyLikeFromMatchSync,
@@ -32,7 +39,8 @@ import { mountResultsScreen } from "./results.js";
 
 function getWaveSurfer() {
   const g = globalThis;
-  if (g.WaveSurfer && typeof g.WaveSurfer.create === "function") return g.WaveSurfer;
+  if (g.WaveSurfer && typeof g.WaveSurfer.create === "function")
+    return g.WaveSurfer;
   throw new Error("WaveSurfer not loaded");
 }
 
@@ -62,7 +70,7 @@ function escapeHtml(s) {
 }
 
 /** If server omits `votes_close_at` (matches backend `VOTING_COLLECT_S`). */
-const VOTE_COLLECT_FALLBACK_S = 30;
+const VOTE_COLLECT_FALLBACK_S = 60;
 
 export function mountVoteSelectionScreen(root, ctx) {
   mountAuthCornerLeave(ctx);
@@ -73,9 +81,11 @@ export function mountVoteSelectionScreen(root, ctx) {
   const beats = ctx.beats || [];
   /** Server wall-clock when voting opens globally (may move earlier when everyone finishes the slideshow). */
   let unlockAt =
-    typeof ctx.votesUnlockWall === "number" && Number.isFinite(ctx.votesUnlockWall)
+    typeof ctx.votesUnlockWall === "number" &&
+    Number.isFinite(ctx.votesUnlockWall)
       ? ctx.votesUnlockWall
-      : typeof ctx.votesUnlockAt === "number" && Number.isFinite(ctx.votesUnlockAt)
+      : typeof ctx.votesUnlockAt === "number" &&
+          Number.isFinite(ctx.votesUnlockAt)
         ? ctx.votesUnlockAt
         : 0;
   let votesCloseAt =
@@ -130,12 +140,18 @@ export function mountVoteSelectionScreen(root, ctx) {
 
   let unmountMpChat =
     ctx.mpWs instanceof WebSocket
-      ? mountMpChat({ ws: ctx.mpWs, getWs: () => ctx.mpWs, playerId, continueSession: true })
+      ? mountMpChat({
+          ws: ctx.mpWs,
+          getWs: () => ctx.mpWs,
+          playerId,
+          continueSession: true,
+        })
       : () => {};
 
   /** @type {ReturnType<typeof normalizeLobbyLike>} */
   let lobbyView = normalizeLobbyLike({});
-  const syncProgressHint = () => syncMatchProgressHint(root, "mp-corner-vote", "vote", lobbyView);
+  const syncProgressHint = () =>
+    syncMatchProgressHint(root, "mp-corner-vote", "vote", lobbyView);
 
   const applyVoteTimingFromSync = (sync) => {
     if (!sync || String(sync.match_state) !== "voting") return;
@@ -144,7 +160,11 @@ export function mountVoteSelectionScreen(root, ctx) {
     const vc = sync.votes_close_at;
     if (typeof vc === "number" && Number.isFinite(vc)) votesCloseAt = vc;
     const done = sync.slideshow_completed;
-    if (Array.isArray(done) && playerId && done.some((id) => String(id) === playerId)) {
+    if (
+      Array.isArray(done) &&
+      playerId &&
+      done.some((id) => String(id) === playerId)
+    ) {
       slideshowDone = true;
     }
   };
@@ -184,7 +204,11 @@ export function mountVoteSelectionScreen(root, ctx) {
         maybeShowVote();
       }
       if (resultsPollNav || preserveWs) return;
-      if (String(sync.match_state) !== "results" || !sync.results || typeof sync.results !== "object") {
+      if (
+        String(sync.match_state) !== "results" ||
+        !sync.results ||
+        typeof sync.results !== "object"
+      ) {
         return;
       }
       resultsPollNav = true;
@@ -227,7 +251,12 @@ export function mountVoteSelectionScreen(root, ctx) {
     syncProgressHint();
     const tickUnlock = () => {
       const remain = unlockAt - Date.now() / 1000;
-      updatePhaseTimerBar(root, "mp-vote-unlock-phase", unlockTotalSec, Math.max(0, remain));
+      updatePhaseTimerBar(
+        root,
+        "mp-vote-unlock-phase",
+        unlockTotalSec,
+        Math.max(0, remain),
+      );
       if (remain <= 0 || slideshowDone) {
         if (unlockInterval) clearInterval(unlockInterval);
         unlockInterval = 0;
@@ -253,16 +282,31 @@ export function mountVoteSelectionScreen(root, ctx) {
     voteUiLocked = false;
 
     const timerRowHtml =
-      votesCloseAt != null ? `<div aria-live="polite">${phaseTimerRowHtml("mp-vote-deadline-phase")}</div>` : "";
+      votesCloseAt != null
+        ? `<div aria-live="polite">${phaseTimerRowHtml("mp-vote-deadline-phase")}</div>`
+        : "";
 
     const startDeadlineTick = () => {
       if (votesCloseAt == null) return;
+      /** When server window is unknown, pin total to first remainder so the bar matches the label. */
+      let barTotalSec = null;
       const tickDeadline = () => {
         const now = Date.now() / 1000;
-        const windowS =
-          unlockAt > 0 && votesCloseAt > unlockAt ? votesCloseAt - unlockAt : VOTE_COLLECT_FALLBACK_S;
         const remainInVoteWindow = Math.max(0, votesCloseAt - now);
-        updatePhaseTimerBar(root, "mp-vote-deadline-phase", Math.max(1, windowS), remainInVoteWindow);
+        let totalSec;
+        if (unlockAt > 0 && votesCloseAt > unlockAt) {
+          totalSec = votesCloseAt - unlockAt;
+        } else {
+          if (barTotalSec == null)
+            barTotalSec = Math.max(1, remainInVoteWindow);
+          totalSec = barTotalSec;
+        }
+        updatePhaseTimerBar(
+          root,
+          "mp-vote-deadline-phase",
+          Math.max(1, totalSec),
+          remainInVoteWindow,
+        );
       };
       voteDeadlineInterval = window.setInterval(tickDeadline, 250);
       tickDeadline();
@@ -347,7 +391,9 @@ export function mountVoteSelectionScreen(root, ctx) {
         setVoteCardsLocked(true);
         playSfxMajor();
         try {
-          ctx.mpWs.send(JSON.stringify({ type: "vote_cast", target_player_id: tid }));
+          ctx.mpWs.send(
+            JSON.stringify({ type: "vote_cast", target_player_id: tid }),
+          );
           const err = root.querySelector("#vote-err");
           if (err) err.textContent = "Vote sent…";
         } catch {
@@ -438,14 +484,24 @@ export function mountVoteSelectionScreen(root, ctx) {
     if (m.type === "results") {
       preserveWs = true;
       stopResultsPoll();
-      ctx.navigate(mountResultsScreen, { mpWs: ctx.mpWs, results: m, playerId });
+      ctx.navigate(mountResultsScreen, {
+        mpWs: ctx.mpWs,
+        results: m,
+        playerId,
+      });
       return;
     }
     if (m.type === "votes_timing" && String(m.lobby_id) === String(lobbyId)) {
-      if (typeof m.votes_unlock_at === "number" && Number.isFinite(m.votes_unlock_at)) {
+      if (
+        typeof m.votes_unlock_at === "number" &&
+        Number.isFinite(m.votes_unlock_at)
+      ) {
         unlockAt = m.votes_unlock_at;
       }
-      if (typeof m.votes_close_at === "number" && Number.isFinite(m.votes_close_at)) {
+      if (
+        typeof m.votes_close_at === "number" &&
+        Number.isFinite(m.votes_close_at)
+      ) {
         votesCloseAt = m.votes_close_at;
       }
       maybeShowVote();

@@ -4,7 +4,11 @@
 import { getApiBase } from "./apiOrigin.js";
 import { clearAuthCorner } from "./authCorner.js";
 import { getUsername, isLoggedIn, validateSession } from "./authApi.js";
-import { resetAppErrorContext, setAppErrorContext, showAppError } from "./errorToast.js";
+import {
+  resetAppErrorContext,
+  setAppErrorContext,
+  showAppError,
+} from "./errorToast.js";
 import { playSfxBeatBattle } from "./sfx.js";
 import { mountModeSelectScreen } from "./screens/modeSelect.js";
 import { initCornerSocialTooltips } from "./cornerSocialTooltips.js";
@@ -23,7 +27,8 @@ function boot() {
   if (creditsBtn instanceof HTMLElement) initCreditsCornerControl(creditsBtn);
   window.addEventListener("error", (ev) => {
     const fn = ev.filename || "";
-    if (!fn || fn.includes("extension://") || fn.includes("moz-extension://")) return;
+    if (!fn || fn.includes("extension://") || fn.includes("moz-extension://"))
+      return;
     if (!fn.includes("/js/") && !/\/main\.js(\?|$)/.test(fn)) return;
     showAppError({
       message: ev.message || "Something in the page hit an error.",
@@ -59,8 +64,10 @@ function boot() {
       username: getUsername(),
       ...extra,
     };
-    if (ctx.playerId != null) setAppErrorContext({ playerId: String(ctx.playerId) });
-    if (ctx.lobbyId != null) setAppErrorContext({ lobbyId: String(ctx.lobbyId) });
+    if (ctx.playerId != null)
+      setAppErrorContext({ playerId: String(ctx.playerId) });
+    if (ctx.lobbyId != null)
+      setAppErrorContext({ lobbyId: String(ctx.lobbyId) });
     unmount = mountFn(root, ctx);
   };
 

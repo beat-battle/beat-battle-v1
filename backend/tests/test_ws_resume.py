@@ -59,6 +59,7 @@ def test_leave_lobby_hard_removes(tmp_path) -> None:
 
 def test_leave_lobby_in_match_soft_detach_like_disconnect(tmp_path) -> None:
     """In-match Leave uses grace (same as losing socket) so reconnect prompt can show."""
+
     async def run() -> None:
         mgr = LobbyManager(tmp_path)
         lid = "LVIN01"
@@ -250,6 +251,7 @@ def test_pending_reconnect_cleared_after_resume(tmp_path) -> None:
 
 def test_pending_reconnect_results_soft_detach(tmp_path) -> None:
     """Results-phase soft drop still offers reconnect (anti–lobby-hop)."""
+
     async def run() -> None:
         mgr = LobbyManager(tmp_path)
         lid = "PEND04"

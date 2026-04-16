@@ -3,7 +3,11 @@
  */
 import { clearMpChatSession } from "./mpChat.js";
 import { clearMpSeat } from "./mpSeatStorage.js";
-import { playSfxPlayerJoin, playSfxPlayerLeave, playSfxSoloMatchAlarm } from "./sfx.js";
+import {
+  playSfxPlayerJoin,
+  playSfxPlayerLeave,
+  playSfxSoloMatchAlarm,
+} from "./sfx.js";
 import { supporterPlainPrefix } from "./supporters.js";
 
 const HOST_ID = "mp-presence-toast-host";
@@ -53,7 +57,9 @@ function show(kind, label) {
   }
   host.appendChild(card);
   requestAnimationFrame(() => {
-    requestAnimationFrame(() => card.classList.add("mp-presence-toast--visible"));
+    requestAnimationFrame(() =>
+      card.classList.add("mp-presence-toast--visible"),
+    );
   });
   window.setTimeout(() => {
     card.classList.remove("mp-presence-toast--visible");
@@ -134,5 +140,7 @@ export function navigateToMenuAfterLobbyDissolved(ctx, ws, m) {
   } catch {
     /* ignore */
   }
-  return import("./screens/modeSelect.js").then((mod) => ctx.navigate(mod.mountModeSelectScreen));
+  return import("./screens/modeSelect.js").then((mod) =>
+    ctx.navigate(mod.mountModeSelectScreen),
+  );
 }

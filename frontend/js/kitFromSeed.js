@@ -46,7 +46,11 @@ export function pickIndex(seed, slotIndex, spice, n) {
   if (n <= 0) throw new Error("n must be positive");
   const spiceBits = float32Bits(spice);
   const s0 =
-    (Number(seed) ^ (slotIndex * 1_000_003) ^ spiceBits ^ ((slotIndex << 16) >>> 0)) >>> 0;
+    (Number(seed) ^
+      (slotIndex * 1_000_003) ^
+      spiceBits ^
+      ((slotIndex << 16) >>> 0)) >>>
+    0;
   let t = (s0 + 0x6d2b79f5) >>> 0;
   t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
   t = (t ^ (t + (Math.imul(t ^ (t >>> 7), t | 61) >>> 0))) >>> 0;
@@ -85,7 +89,9 @@ export async function fetchKitManifest(apiBase) {
   const cdn = getCdnBase().replace(/\/+$/, "");
   if (cdn) {
     try {
-      const cdnRes = await fetch(`${cdn}/kit-manifest.json`, { cache: "no-store" });
+      const cdnRes = await fetch(`${cdn}/kit-manifest.json`, {
+        cache: "no-store",
+      });
       if (cdnRes.ok) {
         const data = await cdnRes.json();
         if (isValidManifestShape(data)) {
@@ -138,7 +144,11 @@ function assertOggPayload(relPath, arr) {
   const peek = new Uint8Array(arr, 0, peekLen);
   const text = new TextDecoder("utf-8", { fatal: false }).decode(peek);
   const t = text.trimStart();
-  if (t.startsWith("<") || t.startsWith("<!") || /^\s*html/i.test(text.slice(0, 24))) {
+  if (
+    t.startsWith("<") ||
+    t.startsWith("<!") ||
+    /^\s*html/i.test(text.slice(0, 24))
+  ) {
     throw new Error(
       `Got a web page instead of audio for ${relPath}. Check CDN URL or try again.`,
     );
@@ -199,7 +209,10 @@ function arrayBufferToBase64(buffer) {
   const chunk = 0x8000;
   let bin = "";
   for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+    bin += String.fromCharCode.apply(
+      null,
+      Array.from(bytes.subarray(i, i + chunk)),
+    );
   }
   return btoa(bin);
 }
@@ -293,7 +306,10 @@ export function audioBufferToWavBase64(buffer) {
   let bin = "";
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+    bin += String.fromCharCode.apply(
+      null,
+      Array.from(bytes.subarray(i, i + chunk)),
+    );
   }
   return btoa(bin);
 }
@@ -331,7 +347,10 @@ export async function loadSynthBuffersAndMp3Base64Parallel({
         buffers[key] = await resampleTo44100(decoded);
       } catch (e) {
         const hint = e instanceof Error ? e.message : String(e);
-        console.warn(`[kit] decodeAudioData failed for ${relPath} (${key}):`, hint);
+        console.warn(
+          `[kit] decodeAudioData failed for ${relPath} (${key}):`,
+          hint,
+        );
         buffers[key] = undefined;
       }
     }),

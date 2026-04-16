@@ -16,7 +16,9 @@ from .generator import generate_kit
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate a trap-oriented drum kit from dataset/.")
+    parser = argparse.ArgumentParser(
+        description="Generate a trap-oriented drum kit from dataset/."
+    )
     parser.add_argument(
         "--seed",
         type=int,

@@ -38,7 +38,7 @@ const CREDITS = [
   {
     name: "sebben",
     contribution: "Tuning Samples",
-  }
+  },
 ];
 
 export function openCreditsOverlay() {

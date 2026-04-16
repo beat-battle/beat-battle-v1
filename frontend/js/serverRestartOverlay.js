@@ -38,7 +38,9 @@ export function showServerRestartingWait() {
   card.append(title, hint, btn);
   el.appendChild(card);
   document.body.appendChild(el);
-  requestAnimationFrame(() => el.classList.add("server-restart-overlay--visible"));
+  requestAnimationFrame(() =>
+    el.classList.add("server-restart-overlay--visible"),
+  );
 }
 
 export function dismissServerRestartingWait() {

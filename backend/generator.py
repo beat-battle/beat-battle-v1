@@ -452,7 +452,17 @@ def generate_kit(
     out: dict[str, Path] = {}
     offset = 0
 
-    static_order = ["snare", "clap", "hihat", "open_hat", "808", "perc", "fx", "vox", "kick"]
+    static_order = [
+        "snare",
+        "clap",
+        "hihat",
+        "open_hat",
+        "808",
+        "perc",
+        "fx",
+        "vox",
+        "kick",
+    ]
     for logical in static_order:
         p = resolve_sound(logical, cfg)
         y = _generate_with_retries(

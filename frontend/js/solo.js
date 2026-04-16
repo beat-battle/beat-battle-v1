@@ -40,7 +40,8 @@ function labelForKey(key) {
 
 function getWaveSurfer() {
   const g = globalThis;
-  if (g.WaveSurfer && typeof g.WaveSurfer.create === "function") return g.WaveSurfer;
+  if (g.WaveSurfer && typeof g.WaveSurfer.create === "function")
+    return g.WaveSurfer;
   throw new Error("WaveSurfer not loaded");
 }
 
@@ -125,7 +126,8 @@ export function mountSoloScreen(root, ctx) {
   const spice = root.querySelector("#spice");
   const spiceVal = root.querySelector("#spice-value");
   const updateSpice = () => {
-    if (spiceVal && spice) spiceVal.textContent = Number(spice.value).toFixed(1);
+    if (spiceVal && spice)
+      spiceVal.textContent = Number(spice.value).toFixed(1);
   };
   spice?.addEventListener("input", () => {
     playSfxOn();
@@ -177,7 +179,10 @@ export function mountSoloScreen(root, ctx) {
   function buildGrid() {
     const grid = root.querySelector("#sound-grid");
     if (!grid) return;
-    mountKitLayoutShell(grid, { synthKeys: SYNTH_KEYS, appendCard: buildKitCard });
+    mountKitLayoutShell(grid, {
+      synthKeys: SYNTH_KEYS,
+      appendCard: buildKitCard,
+    });
   }
 
   function bindWaveformPlayback(key, waveWrap, audio) {
@@ -287,7 +292,9 @@ export function mountSoloScreen(root, ctx) {
     for (const key of SOUND_KEYS) {
       const b64 = lastSoundsB64[key];
       if (!b64) continue;
-      folder.file(`${key}.${KIT_SOUND_FILE_EXT}`, base64ToBytes(b64), { binary: true });
+      folder.file(`${key}.${KIT_SOUND_FILE_EXT}`, base64ToBytes(b64), {
+        binary: true,
+      });
     }
     const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);
@@ -343,7 +350,8 @@ export function mountSoloScreen(root, ctx) {
     const loadLayer = document.createElement("div");
     loadLayer.className = "synth-reveal-overlay";
     loadLayer.setAttribute("role", "status");
-    loadLayer.innerHTML = '<p class="arcade-status" id="solo-kit-load">Loading kit…</p>';
+    loadLayer.innerHTML =
+      '<p class="arcade-status" id="solo-kit-load">Loading kit…</p>';
     document.body.appendChild(loadLayer);
     activeKitOverlay = loadLayer;
     const loadEl = loadLayer.querySelector("#solo-kit-load");
@@ -396,26 +404,35 @@ export function mountSoloScreen(root, ctx) {
       clearKitLoadUi();
       if (status) {
         status.textContent =
-          e instanceof Error ? e.message : "Could not load kit. Is the API running?";
+          e instanceof Error
+            ? e.message
+            : "Could not load kit. Is the API running?";
       }
     } finally {
       doneLoading();
     }
   }
 
-  root.querySelector("#btn-generate")?.addEventListener("click", () => generateKit());
-  root.querySelector("#btn-regenerate")?.addEventListener("click", () => generateKit());
+  root
+    .querySelector("#btn-generate")
+    ?.addEventListener("click", () => generateKit());
+  root
+    .querySelector("#btn-regenerate")
+    ?.addEventListener("click", () => generateKit());
   root.querySelector("#btn-download-all")?.addEventListener("click", () => {
     playSfxMinor();
     downloadAllAsZip().catch((e) => {
       console.error(e);
       const st = root.querySelector("#status");
-      if (st) st.textContent = e instanceof Error ? e.message : "Could not build ZIP.";
+      if (st)
+        st.textContent =
+          e instanceof Error ? e.message : "Could not build ZIP.";
     });
   });
 
   root.querySelector("#sound-grid")?.addEventListener("click", (e) => {
-    const btn = e.target instanceof Element ? e.target.closest(".card-download") : null;
+    const btn =
+      e.target instanceof Element ? e.target.closest(".card-download") : null;
     if (!(btn instanceof HTMLButtonElement)) return;
     e.preventDefault();
     e.stopPropagation();

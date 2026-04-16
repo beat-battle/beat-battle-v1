@@ -2,7 +2,10 @@
  * MP chat: one scrollback, one input bar. ASCII only + a handful of emoji shortcuts.
  */
 import { escapeHtml } from "./rankUi.js";
-import { subscribeSupporterList, supporterDisplayNameInnerHtml } from "./supporters.js";
+import {
+  subscribeSupporterList,
+  supporterDisplayNameInnerHtml,
+} from "./supporters.js";
 import { playSfxMinor } from "./sfx.js";
 
 const BUFFER_MAX = 50;
@@ -126,7 +129,8 @@ function renderLogEl(logEl) {
       return `<div class="mp-chat-line mp-chat-line--emoji"><span class="mp-chat-who">${who}</span><span class="mp-chat-emoji" aria-hidden="true">${ch}</span></div>`;
     })
     .join("");
-  logEl.innerHTML = lines || `<p class="mp-chat-empty arcade-hint">No messages yet.</p>`;
+  logEl.innerHTML =
+    lines || `<p class="mp-chat-empty arcade-hint">No messages yet.</p>`;
   logEl.scrollTop = logEl.scrollHeight;
 }
 
@@ -236,7 +240,11 @@ export function mountMpChat({ ws, getWs, playerId, continueSession = false }) {
   const trySendText = () => {
     showErr("");
     const sock = activeWs();
-    if (!(input instanceof HTMLInputElement) || sock.readyState !== WebSocket.OPEN) return;
+    if (
+      !(input instanceof HTMLInputElement) ||
+      sock.readyState !== WebSocket.OPEN
+    )
+      return;
     const t = input.value.trim();
     if (!t) return;
     if (t.length > MAX_LEN) {

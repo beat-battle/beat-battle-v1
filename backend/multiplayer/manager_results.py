@@ -38,7 +38,9 @@ def results_ws_payload_and_winner_user_ids(
         return pl.name if pl else pid
 
     board = sorted(counts.items(), key=lambda x: (-x[1], name_for(x[0])))
-    leaderboard = [{"player_id": pid, "name": name_for(pid), "votes": v} for pid, v in board]
+    leaderboard = [
+        {"player_id": pid, "name": name_for(pid), "votes": v} for pid, v in board
+    ]
     winner_names = [name_for(w) for w in winners]
     winner_user_ids = [lobby.players[w].user_id for w in winners if w in lobby.players]
 
@@ -54,7 +56,9 @@ def results_ws_payload_and_winner_user_ids(
             }
         )
 
-    participants = [{"player_id": pid, "name": lobby.players[pid].name} for pid in lobby.players]
+    participants = [
+        {"player_id": pid, "name": lobby.players[pid].name} for pid in lobby.players
+    ]
 
     payload: dict[str, Any] = {
         "type": "results",

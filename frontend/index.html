@@ -1,126 +1,159 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="cookup-api" content="" />
-  <meta name="beat-battle-api" content="" />
-  <meta name="beat-battle-cdn" content="https://assets.beat-battle.net" />
-  <title>Beat Battle</title>
-  <script>
-    (function () {
-      var m = document.querySelector('meta[name="beat-battle-cdn"]');
-      var b = (m && m.getAttribute("content") || "").trim().replace(/\/+$/, "");
-      var h = b ? b + "/sfx/BeatBattle.mp3" : "/sfx/BeatBattle.mp3";
-      var l = document.createElement("link");
-      l.rel = "preload";
-      l.href = h + "?v=__STATIC_BUILD__";
-      l.as = "audio";
-      l.type = "audio/mpeg";
-      document.head.appendChild(l);
-    })();
-  </script>
-  <link rel="stylesheet" href="style.css?v=__STATIC_BUILD__" />
-  <script src="https://cdn.jsdelivr.net/npm/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-</head>
-<body>
-  <div id="app-root" class="app-root"></div>
-  <div class="corner-social-stack corner-social-menu" data-corner-tooltip="Links &amp; credits">
-    <button
-      type="button"
-      class="corner-social-trigger corner-social-menu-toggle"
-      aria-expanded="false"
-      aria-controls="corner-social-menu-panel"
-      id="corner-social-menu-toggle"
-      aria-label="Open links menu"
-    >
-      <svg
-        class="corner-social-icon corner-social-icon--menu"
-        width="40"
-        height="32"
-        viewBox="0 0 24 24"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true"
-      >
-        <g class="corner-social-menu-burger" fill="currentColor">
-          <rect class="corner-social-menu-line corner-social-menu-line--t" x="3" y="6" width="18" height="2" rx="1" />
-          <rect class="corner-social-menu-line corner-social-menu-line--m" x="3" y="11" width="18" height="2" rx="1" />
-          <rect class="corner-social-menu-line corner-social-menu-line--b" x="3" y="16" width="18" height="2" rx="1" />
-        </g>
-        <g class="corner-social-menu-x" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <line x1="7" y1="7" x2="17" y2="17" />
-          <line x1="17" y1="7" x2="7" y2="17" />
-        </g>
-      </svg>
-    </button>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="cookup-api" content="" />
+    <meta name="beat-battle-api" content="" />
+    <meta name="beat-battle-cdn" content="https://assets.beat-battle.net" />
+    <title>Beat Battle</title>
+    <script>
+      (function () {
+        var m = document.querySelector('meta[name="beat-battle-cdn"]');
+        var b = ((m && m.getAttribute("content")) || "")
+          .trim()
+          .replace(/\/+$/, "");
+        var h = b ? b + "/sfx/BeatBattle.mp3" : "/sfx/BeatBattle.mp3";
+        var l = document.createElement("link");
+        l.rel = "preload";
+        l.href = h + "?v=__STATIC_BUILD__";
+        l.as = "audio";
+        l.type = "audio/mpeg";
+        document.head.appendChild(l);
+      })();
+    </script>
+    <link rel="stylesheet" href="style.css?v=__STATIC_BUILD__" />
+    <script src="https://cdn.jsdelivr.net/npm/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  </head>
+  <body>
+    <div id="app-root" class="app-root"></div>
     <div
-      class="corner-social-menu__grow"
-      id="corner-social-menu-panel"
-      role="region"
-      aria-labelledby="corner-social-menu-toggle"
-      aria-hidden="true"
-      inert
+      class="corner-social-stack corner-social-menu"
+      data-corner-tooltip="Links &amp; credits"
     >
-      <div class="corner-social-menu__grow-inner">
-        <div class="corner-social-menu__inner">
-          <a
-            class="corner-social-link"
-            href="https://buymeacoffee.com/polystalgia"
-            target="_blank"
-            rel="noopener noreferrer"
-            data-corner-tooltip="Buy me a coffee"
-            aria-label="Buy me a coffee"
-          >
-            <img
-              class="corner-social-icon corner-social-icon--img"
-              src="imgs/icons/coffee.svg"
-              alt=""
-              width="42"
-              height="32"
-              decoding="async"
-              draggable="false"
+      <button
+        type="button"
+        class="corner-social-trigger corner-social-menu-toggle"
+        aria-expanded="false"
+        aria-controls="corner-social-menu-panel"
+        id="corner-social-menu-toggle"
+        aria-label="Open links menu"
+      >
+        <svg
+          class="corner-social-icon corner-social-icon--menu"
+          width="40"
+          height="32"
+          viewBox="0 0 24 24"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <g class="corner-social-menu-burger" fill="currentColor">
+            <rect
+              class="corner-social-menu-line corner-social-menu-line--t"
+              x="3"
+              y="6"
+              width="18"
+              height="2"
+              rx="1"
             />
-          </a>
-          <a
-            class="corner-social-link"
-            href="https://discord.gg/KzchFwdb"
-            target="_blank"
-            rel="noopener noreferrer"
-            data-corner-tooltip="Join the Discord"
-            aria-label="Join the Discord"
-          >
-            <img
-              class="corner-social-icon corner-social-icon--img"
-              src="imgs/icons/discord.svg"
-              alt=""
-              width="42"
-              height="32"
-              decoding="async"
-              draggable="false"
+            <rect
+              class="corner-social-menu-line corner-social-menu-line--m"
+              x="3"
+              y="11"
+              width="18"
+              height="2"
+              rx="1"
             />
-          </a>
-          <button
-            type="button"
-            class="corner-social-trigger"
-            id="credits-corner-btn"
-            data-corner-tooltip="Credits"
-            aria-label="Credits"
-          >
-            <img
-              class="corner-social-icon corner-social-icon--heart corner-social-icon--img"
-              src="imgs/icons/heart.svg"
-              alt=""
-              width="38"
-              height="34"
-              decoding="async"
-              draggable="false"
+            <rect
+              class="corner-social-menu-line corner-social-menu-line--b"
+              x="3"
+              y="16"
+              width="18"
+              height="2"
+              rx="1"
             />
-          </button>
+          </g>
+          <g
+            class="corner-social-menu-x"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <line x1="7" y1="7" x2="17" y2="17" />
+            <line x1="17" y1="7" x2="7" y2="17" />
+          </g>
+        </svg>
+      </button>
+      <div
+        class="corner-social-menu__grow"
+        id="corner-social-menu-panel"
+        role="region"
+        aria-labelledby="corner-social-menu-toggle"
+        aria-hidden="true"
+        inert
+      >
+        <div class="corner-social-menu__grow-inner">
+          <div class="corner-social-menu__inner">
+            <a
+              class="corner-social-link"
+              href="https://buymeacoffee.com/polystalgia"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-corner-tooltip="Buy me a coffee"
+              aria-label="Buy me a coffee"
+            >
+              <img
+                class="corner-social-icon corner-social-icon--img"
+                src="imgs/icons/coffee.svg"
+                alt=""
+                width="42"
+                height="32"
+                decoding="async"
+                draggable="false"
+              />
+            </a>
+            <a
+              class="corner-social-link"
+              href="https://discord.gg/KzchFwdb"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-corner-tooltip="Join the Discord"
+              aria-label="Join the Discord"
+            >
+              <img
+                class="corner-social-icon corner-social-icon--img"
+                src="imgs/icons/discord.svg"
+                alt=""
+                width="42"
+                height="32"
+                decoding="async"
+                draggable="false"
+              />
+            </a>
+            <button
+              type="button"
+              class="corner-social-trigger"
+              id="credits-corner-btn"
+              data-corner-tooltip="Credits"
+              aria-label="Credits"
+            >
+              <img
+                class="corner-social-icon corner-social-icon--heart corner-social-icon--img"
+                src="imgs/icons/heart.svg"
+                alt=""
+                width="38"
+                height="34"
+                decoding="async"
+                draggable="false"
+              />
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-  <script type="module" src="js/main.js?v=__STATIC_BUILD__"></script>
-</body>
+    <script type="module" src="js/main.js?v=__STATIC_BUILD__"></script>
+  </body>
 </html>

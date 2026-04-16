@@ -43,7 +43,9 @@ function asVoteMap(v) {
  * @returns {Required<Pick<LobbyLike, "host_id">> & { players: LobbyPlayerRow[]; cook_finished: string[]; uploaded: string[]; votes: Record<string, string>; player_count: number; slideshow_completed: string[] }}
  */
 export function normalizeLobbyLike(raw) {
-  const players = Array.isArray(raw?.players) ? raw.players.map((p) => ({ ...p, id: String(p?.id ?? "") })) : [];
+  const players = Array.isArray(raw?.players)
+    ? raw.players.map((p) => ({ ...p, id: String(p?.id ?? "") }))
+    : [];
   const n = Number(raw?.player_count);
   const player_count = Number.isFinite(n) && n > 0 ? n : players.length;
   return {
@@ -81,8 +83,15 @@ export function applyMatchWsToLobby(prev, msg) {
     base.uploaded = [...s].sort();
     return base;
   }
-  if (t === "vote_cast" && msg.voter_id != null && msg.target_player_id != null) {
-    base.votes = { ...base.votes, [String(msg.voter_id)]: String(msg.target_player_id) };
+  if (
+    t === "vote_cast" &&
+    msg.voter_id != null &&
+    msg.target_player_id != null
+  ) {
+    base.votes = {
+      ...base.votes,
+      [String(msg.voter_id)]: String(msg.target_player_id),
+    };
     return base;
   }
   return base;
@@ -96,7 +105,9 @@ export function lobbyLikeFromMatchSync(sync) {
   if (!sync || typeof sync !== "object") return null;
   return {
     host_id: sync.host_id != null ? String(sync.host_id) : "",
-    players: Array.isArray(sync.players) ? /** @type {LobbyPlayerRow[]} */ (sync.players) : [],
+    players: Array.isArray(sync.players)
+      ? /** @type {LobbyPlayerRow[]} */ (sync.players)
+      : [],
     cook_finished: asStrArr(sync.cook_finished),
     uploaded: asStrArr(sync.uploaded),
     votes: asVoteMap(sync.votes),
@@ -171,7 +182,9 @@ function sortedNamesByDone(players, doneIds) {
     name: String(p.name ?? p.id ?? ""),
     done: doneIds.has(String(p.id ?? "")),
   }));
-  rows.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  rows.sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+  );
   return rows;
 }
 
@@ -225,7 +238,11 @@ function setCookProgressHint(el, v) {
   const n = ids.length;
   const tot = Math.max(1, v.player_count || v.players.length);
   const done = new Set(ids.map((x) => String(x)));
-  setProgressHintTooltip(el, `${n} / ${tot} finished`, nameRowsTooltipHtml(v.players, done));
+  setProgressHintTooltip(
+    el,
+    `${n} / ${tot} finished`,
+    nameRowsTooltipHtml(v.players, done),
+  );
 }
 
 /**
@@ -241,9 +258,15 @@ function setUploadProgressHint(el, v) {
   }
   el.classList.remove("hidden");
   const tot = Math.max(1, v.player_count || v.players.length);
-  const up = v.uploaded.filter((id) => v.players.some((p) => p.id === id)).length;
+  const up = v.uploaded.filter((id) =>
+    v.players.some((p) => p.id === id),
+  ).length;
   const done = new Set(v.uploaded.map((x) => String(x)));
-  setProgressHintTooltip(el, `${up} / ${tot} uploaded`, nameRowsTooltipHtml(v.players, done));
+  setProgressHintTooltip(
+    el,
+    `${up} / ${tot} uploaded`,
+    nameRowsTooltipHtml(v.players, done),
+  );
 }
 
 /**
@@ -265,7 +288,11 @@ function setVoteProgressHint(el, v) {
   const total = Math.max(1, reqIds.length);
   const voters = v.players.filter((p) => req.has(String(p.id ?? "")));
   const tip = nameRowsTooltipHtml(voters, voted);
-  setProgressHintTooltip(el, `${n} / ${total} voted`, tip || '<span class="mp-tip-name mp-tip-name--todo">—</span>');
+  setProgressHintTooltip(
+    el,
+    `${n} / ${total} voted`,
+    tip || '<span class="mp-tip-name mp-tip-name--todo">—</span>',
+  );
 }
 
 /**
@@ -276,17 +303,27 @@ function setVoteProgressHint(el, v) {
  */
 export function setRematchProgressHint(el, players, votedIds) {
   if (!el) return;
-  const voted = votedIds instanceof Set ? votedIds : new Set(Array.from(votedIds || [], String));
+  const voted =
+    votedIds instanceof Set
+      ? votedIds
+      : new Set(Array.from(votedIds || [], String));
   if (!players.length) {
     el.classList.add("hidden");
     el.innerHTML = "";
     return;
   }
   el.classList.remove("hidden");
-  const rows = players.map((p) => ({ id: String(p.id ?? ""), name: String(p.name ?? p.id ?? "") }));
+  const rows = players.map((p) => ({
+    id: String(p.id ?? ""),
+    name: String(p.name ?? p.id ?? ""),
+  }));
   const n = rows.filter((p) => p.id && voted.has(p.id)).length;
   const tot = rows.length;
-  setProgressHintTooltip(el, `${n} / ${tot} Rematch`, nameRowsTooltipHtml(rows, voted));
+  setProgressHintTooltip(
+    el,
+    `${n} / ${tot} Rematch`,
+    nameRowsTooltipHtml(rows, voted),
+  );
 }
 
 /**

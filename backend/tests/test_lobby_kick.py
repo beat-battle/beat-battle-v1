@@ -18,8 +18,12 @@ def test_host_kick_sends_payload_and_removes_target(tmp_path: Path) -> None:
         target = "tgtPlayerIdxx"
         lobby = Lobby(id=lid, spice=0.5, is_public=True)
         lobby.state = LobbyState.LOBBY
-        lobby.players[host] = Player(id=host, name="Host", user_id=1, wins=0, ready=False)
-        lobby.players[target] = Player(id=target, name="Guest", user_id=2, wins=0, ready=False)
+        lobby.players[host] = Player(
+            id=host, name="Host", user_id=1, wins=0, ready=False
+        )
+        lobby.players[target] = Player(
+            id=target, name="Guest", user_id=2, wins=0, ready=False
+        )
         mgr.lobbies[lid] = lobby
         mgr.player_lobby[host] = lid
         mgr.player_lobby[target] = lid
@@ -52,7 +56,9 @@ def test_non_host_cannot_kick(tmp_path: Path) -> None:
         lobby = Lobby(id=lid, spice=0.5, is_public=True)
         lobby.state = LobbyState.LOBBY
         lobby.players[host] = Player(id=host, name="H", user_id=1, wins=0, ready=False)
-        lobby.players[joiner] = Player(id=joiner, name="J", user_id=2, wins=0, ready=False)
+        lobby.players[joiner] = Player(
+            id=joiner, name="J", user_id=2, wins=0, ready=False
+        )
         mgr.lobbies[lid] = lobby
         mgr.player_lobby[host] = lid
         mgr.player_lobby[joiner] = lid
@@ -73,7 +79,10 @@ def test_non_host_cannot_kick(tmp_path: Path) -> None:
         assert joiner in mgr.lobbies[lid].players
         assert host in mgr.lobbies[lid].players
         err_payloads = [json.loads(s) for s in host_sent if "error" in s]
-        assert any(p.get("type") == "error" and p.get("error_code") == "KICK_NOT_HOST" for p in err_payloads)
+        assert any(
+            p.get("type") == "error" and p.get("error_code") == "KICK_NOT_HOST"
+            for p in err_payloads
+        )
 
     asyncio.run(run())
 
@@ -89,9 +98,15 @@ def test_kick_unready_player_starts_when_remaining_all_ready(tmp_path: Path) -> 
         unready = "unreadyPlayerId"
         lobby = Lobby(id=lid, spice=0.5, is_public=True)
         lobby.state = LobbyState.LOBBY
-        lobby.players[host] = Player(id=host, name="Host", user_id=1, wins=0, ready=True)
-        lobby.players[ready_p] = Player(id=ready_p, name="R", user_id=2, wins=0, ready=True)
-        lobby.players[unready] = Player(id=unready, name="U", user_id=3, wins=0, ready=False)
+        lobby.players[host] = Player(
+            id=host, name="Host", user_id=1, wins=0, ready=True
+        )
+        lobby.players[ready_p] = Player(
+            id=ready_p, name="R", user_id=2, wins=0, ready=True
+        )
+        lobby.players[unready] = Player(
+            id=unready, name="U", user_id=3, wins=0, ready=False
+        )
         mgr.lobbies[lid] = lobby
         mgr.player_lobby[host] = lid
         mgr.player_lobby[ready_p] = lid

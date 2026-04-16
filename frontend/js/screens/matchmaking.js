@@ -3,16 +3,25 @@
  */
 import { getUsername, validateSession } from "../authApi.js";
 import { getWsUrl } from "../apiOrigin.js";
-import { notifyMpServerError, setAppErrorContext, showAppError } from "../errorToast.js";
+import {
+  notifyMpServerError,
+  setAppErrorContext,
+  showAppError,
+} from "../errorToast.js";
 import { showServerRestartingWait } from "../serverRestartOverlay.js";
 import { mountAuthCornerLeave } from "../authCorner.js";
 import { mountLobbyScreen } from "./lobby.js";
 
 export function mountMatchmakingScreen(root, ctx) {
   const flow =
-    ctx.lobbyFlow || (ctx.lobbyCode ? "join_code" : ctx.joinLobbyId ? "join_id" : "create");
+    ctx.lobbyFlow ||
+    (ctx.lobbyCode ? "join_code" : ctx.joinLobbyId ? "join_id" : "create");
   const phaseLabel =
-    flow === "create" ? "Creating lobby" : flow === "join_id" ? "Joining from server list" : "Joining with code";
+    flow === "create"
+      ? "Creating lobby"
+      : flow === "join_id"
+        ? "Joining from server list"
+        : "Joining with code";
   setAppErrorContext({ screen: "Matchmaking", phase: phaseLabel });
 
   const name = (ctx.username || ctx.mpName || getUsername() || "Player").trim();
@@ -68,7 +77,11 @@ export function mountMatchmakingScreen(root, ctx) {
 
   const failWithToast = (msg, code, hint) => {
     setStatus(msg);
-    showAppError({ message: msg, errorCode: code ?? null, hint: hint ?? undefined });
+    showAppError({
+      message: msg,
+      errorCode: code ?? null,
+      hint: hint ?? undefined,
+    });
   };
 
   void (async () => {
@@ -143,9 +156,13 @@ export function mountMatchmakingScreen(root, ctx) {
             }),
           );
         } else if (flow === "join_id" && joinLobbyId) {
-          ws?.send(JSON.stringify({ type: "join_lobby", name, lobby_id: joinLobbyId }));
+          ws?.send(
+            JSON.stringify({ type: "join_lobby", name, lobby_id: joinLobbyId }),
+          );
         } else if (lobbyCode) {
-          ws?.send(JSON.stringify({ type: "join_lobby", name, lobby_code: lobbyCode }));
+          ws?.send(
+            JSON.stringify({ type: "join_lobby", name, lobby_code: lobbyCode }),
+          );
         } else {
           failWithToast(
             "The app could not find a lobby to join (missing id or code).",

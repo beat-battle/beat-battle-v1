@@ -11,14 +11,18 @@ const OPEN_CLASS = "corner-social-menu--open";
 export function initCornerSocialMenu(root) {
   const toggle = root.querySelector(".corner-social-menu-toggle");
   const panel = root.querySelector("#corner-social-menu-panel");
-  if (!(toggle instanceof HTMLButtonElement) || !(panel instanceof HTMLElement)) return;
+  if (!(toggle instanceof HTMLButtonElement) || !(panel instanceof HTMLElement))
+    return;
 
   const setOpen = (open) => {
     if (root.classList.contains(OPEN_CLASS) === open) return;
     root.classList.toggle(OPEN_CLASS, open);
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
     panel.setAttribute("aria-hidden", open ? "false" : "true");
-    toggle.setAttribute("aria-label", open ? "Close links menu" : "Open links menu");
+    toggle.setAttribute(
+      "aria-label",
+      open ? "Close links menu" : "Open links menu",
+    );
     if (open) panel.removeAttribute("inert");
     else panel.setAttribute("inert", "");
     if (open) playSfxOn();

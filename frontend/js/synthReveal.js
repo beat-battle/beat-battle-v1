@@ -128,7 +128,11 @@ function waitForDrums(drumsStillLoading) {
  * @param {() => boolean} drumsStillLoading
  * @returns {Promise<void>}
  */
-export async function runSynthReveal(audioContext, synthBuffers, drumsStillLoading) {
+export async function runSynthReveal(
+  audioContext,
+  synthBuffers,
+  drumsStillLoading,
+) {
   const layer = document.createElement("div");
   layer.className = "synth-reveal-overlay";
   layer.setAttribute("role", "dialog");

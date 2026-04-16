@@ -47,7 +47,9 @@ export function mountRegisterScreen(root, ctx) {
     const err = errEl();
     if (err) err.textContent = "";
     if (!USER_RE.test(u)) {
-      if (err) err.textContent = "Username: 3–20 chars, lowercase letters, numbers, underscores only.";
+      if (err)
+        err.textContent =
+          "Username: 3–20 chars, lowercase letters, numbers, underscores only.";
       return;
     }
     if (!p) {
@@ -59,7 +61,9 @@ export function mountRegisterScreen(root, ctx) {
       await registerUser(u, p);
       ctx.navigate(mountLoginScreen);
     } catch (e) {
-      if (err) err.textContent = e instanceof Error ? e.message : "Registration failed.";
+      if (err)
+        err.textContent =
+          e instanceof Error ? e.message : "Registration failed.";
     }
   });
 

@@ -60,7 +60,9 @@ function renderLobby(root, lobby, selfId, kitProgress, settingsPanelOpen) {
       </span>`
           : "";
       const nameWrapClass =
-        kickSlot !== "" ? "lobby-row-name-wrap lobby-row-name-wrap--kick-hover" : "lobby-row-name-wrap";
+        kickSlot !== ""
+          ? "lobby-row-name-wrap lobby-row-name-wrap--kick-hover"
+          : "lobby-row-name-wrap";
       return `
     <div class="lobby-row${kickSlot !== "" ? " lobby-row--kickable" : ""}">
       <div class="${nameWrapClass}">
@@ -73,7 +75,9 @@ function renderLobby(root, lobby, selfId, kitProgress, settingsPanelOpen) {
     })
     .join("");
 
-  const selfReady = Boolean(selfId && players.some((p) => String(p.id) === String(selfId) && p.ready));
+  const selfReady = Boolean(
+    selfId && players.some((p) => String(p.id) === String(selfId) && p.ready),
+  );
 
   const hostSettings =
     isHost && !generating
@@ -123,7 +127,7 @@ function renderLobby(root, lobby, selfId, kitProgress, settingsPanelOpen) {
       ${hostSettings}
       <div class="lobby-list">${rows}</div>
       <p class="arcade-error" id="lobby-err"></p>
-      <div class="arcade-actions"${generating ? ' hidden' : ""}>
+      <div class="arcade-actions"${generating ? " hidden" : ""}>
         <button type="button" class="arcade-btn arcade-btn-primary" id="btn-ready"${
           selfReady ? " disabled" : ""
         }>READY</button>
@@ -193,7 +197,9 @@ export function mountLobbyScreen(root, ctx) {
   const errEl = () => root.querySelector("#lobby-err");
 
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    import("./multiplayerHub.js").then((m) => ctx.navigate(m.mountMultiplayerHubScreen));
+    import("./multiplayerHub.js").then((m) =>
+      ctx.navigate(m.mountMultiplayerHubScreen),
+    );
     return () => {};
   }
 
@@ -224,7 +230,9 @@ export function mountLobbyScreen(root, ctx) {
       } catch {
         /* ignore */
       }
-      import("./modeSelect.js").then((mod) => ctx.navigate(mod.mountModeSelectScreen));
+      import("./modeSelect.js").then((mod) =>
+        ctx.navigate(mod.mountModeSelectScreen),
+      );
       return;
     }
     if (m.type === "lobby_update" && m.lobby) {
@@ -266,14 +274,17 @@ export function mountLobbyScreen(root, ctx) {
   ws.onclose = () => {
     if (preserveWs || intentionalLeave) return;
     showServerRestartingWait();
-    import("./multiplayerHub.js").then((m) => ctx.navigate(m.mountMultiplayerHubScreen));
+    import("./multiplayerHub.js").then((m) =>
+      ctx.navigate(m.mountMultiplayerHubScreen),
+    );
   };
 
   ws.onmessage = onMessage;
 
   const changeHandler = (e) => {
     const t = e.target;
-    if (!(t instanceof HTMLSelectElement) || t.id !== "cook-duration-select") return;
+    if (!(t instanceof HTMLSelectElement) || t.id !== "cook-duration-select")
+      return;
     playSfxMinor();
     if (ws.readyState !== WebSocket.OPEN) {
       const err = errEl();
@@ -294,7 +305,12 @@ export function mountLobbyScreen(root, ctx) {
 
   const clickHandler = (e) => {
     const t = e.target;
-    const origin = t instanceof Element ? t : t && "parentElement" in t ? t.parentElement : null;
+    const origin =
+      t instanceof Element
+        ? t
+        : t && "parentElement" in t
+          ? t.parentElement
+          : null;
     const anonBtn = origin?.closest?.("#lobby-anonymous-toggle");
     if (anonBtn instanceof HTMLButtonElement) {
       e.preventDefault();
@@ -307,7 +323,9 @@ export function mountLobbyScreen(root, ctx) {
       }
       const next = !Boolean(lobby.anonymous_voting);
       try {
-        ws.send(JSON.stringify({ type: "set_anonymous_voting", enabled: next }));
+        ws.send(
+          JSON.stringify({ type: "set_anonymous_voting", enabled: next }),
+        );
       } catch {
         /* ignore */
       }
@@ -365,12 +383,18 @@ export function mountLobbyScreen(root, ctx) {
       } catch {
         /* ignore */
       }
-      import("./modeSelect.js").then((mod) => ctx.navigate(mod.mountModeSelectScreen));
+      import("./modeSelect.js").then((mod) =>
+        ctx.navigate(mod.mountModeSelectScreen),
+      );
     }
   };
   const toggleHandler = (e) => {
     const t = e.target;
-    if (!(t instanceof HTMLDetailsElement) || !t.classList.contains("lobby-settings")) return;
+    if (
+      !(t instanceof HTMLDetailsElement) ||
+      !t.classList.contains("lobby-settings")
+    )
+      return;
     if (!t.isConnected) return;
     lobbySettingsOpen = t.open;
   };

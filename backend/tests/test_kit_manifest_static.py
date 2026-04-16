@@ -25,7 +25,9 @@ def clear_manifest_cache():
     km.get_kit_manifest_cached.cache_clear()
 
 
-def test_kit_manifest_path_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_kit_manifest_path_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     path = tmp_path / "kit-manifest.json"
     path.write_text(
         json.dumps(
@@ -47,7 +49,9 @@ def test_kit_manifest_path_override(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert data["keys"]["synth1"] == ["trap/synths/a.ogg"]
 
 
-def test_kit_manifest_invalid_json_falls_back(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_kit_manifest_invalid_json_falls_back(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     path = tmp_path / "bad.json"
     path.write_text("{not json", encoding="utf-8")
     monkeypatch.setenv("KIT_MANIFEST_PATH", str(path))

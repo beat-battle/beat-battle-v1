@@ -3,8 +3,15 @@
  */
 import { authHeadersMultipart } from "../authApi.js";
 import { mountAuthCornerLeave } from "../authCorner.js";
-import { notifyMpServerError, setAppErrorContext, showAppError } from "../errorToast.js";
-import { dismissServerRestartingWait, showServerRestartingWait } from "../serverRestartOverlay.js";
+import {
+  notifyMpServerError,
+  setAppErrorContext,
+  showAppError,
+} from "../errorToast.js";
+import {
+  dismissServerRestartingWait,
+  showServerRestartingWait,
+} from "../serverRestartOverlay.js";
 import { applyMatchResyncFromPayload } from "../mpMatchResync.js";
 import { runMpWsReconnect } from "../mpReconnect.js";
 import { saveMpSeat } from "../mpSeatStorage.js";
@@ -14,7 +21,11 @@ import {
   notifyMpPlayerJoin,
   notifyMpPlayerLeave,
 } from "../mpPresenceToast.js";
-import { ingestMpChatMessage, mountMpChat, mpChatHandleErrorPayload } from "../mpChat.js";
+import {
+  ingestMpChatMessage,
+  mountMpChat,
+  mpChatHandleErrorPayload,
+} from "../mpChat.js";
 import {
   applyMatchWsToLobby,
   lobbyLikeFromMatchSync,
@@ -31,9 +42,14 @@ import { mountVotingSlideshowScreen } from "./votingSlideshow.js";
 const UPLOAD_WINDOW_SEC = 120;
 
 export function mountUploadScreen(root, ctx) {
-  setAppErrorContext({ screen: "Upload", phase: "Upload beat before time runs out" });
+  setAppErrorContext({
+    screen: "Upload",
+    phase: "Upload beat before time runs out",
+  });
   if (!ctx.mpWs || ctx.mpWs.readyState !== WebSocket.OPEN) {
-    import("./multiplayerHub.js").then((m) => ctx.navigate(m.mountMultiplayerHubScreen));
+    import("./multiplayerHub.js").then((m) =>
+      ctx.navigate(m.mountMultiplayerHubScreen),
+    );
     return () => {};
   }
   const playerId = ctx.playerId;
@@ -87,7 +103,8 @@ export function mountUploadScreen(root, ctx) {
 
   /** @type {ReturnType<typeof normalizeLobbyLike>} */
   let lobbyView = normalizeLobbyLike({});
-  const syncProgressHint = () => syncMatchProgressHint(root, "mp-corner-upload", "upload", lobbyView);
+  const syncProgressHint = () =>
+    syncMatchProgressHint(root, "mp-corner-upload", "upload", lobbyView);
 
   const selfUploaded = () =>
     lobbyView.uploaded.some((id) => String(id) === String(playerId));
@@ -101,7 +118,8 @@ export function mountUploadScreen(root, ctx) {
       formEl?.classList.remove("upload-form--on-server");
       if (onServer instanceof HTMLElement) onServer.classList.add("hidden");
       if (fileIn instanceof HTMLInputElement) fileIn.required = true;
-      if (submitBtn instanceof HTMLButtonElement) submitBtn.textContent = "Upload";
+      if (submitBtn instanceof HTMLButtonElement)
+        submitBtn.textContent = "Upload";
       return;
     }
     formEl?.classList.add("upload-form--on-server");
@@ -109,7 +127,9 @@ export function mountUploadScreen(root, ctx) {
     if (fileIn instanceof HTMLInputElement) fileIn.required = false;
     if (statusEl) {
       const n = Math.max(1, lobbyView.player_count || lobbyView.players.length);
-      const u = lobbyView.uploaded.filter((id) => lobbyView.players.some((p) => String(p.id) === String(id))).length;
+      const u = lobbyView.uploaded.filter((id) =>
+        lobbyView.players.some((p) => String(p.id) === String(id)),
+      ).length;
       statusEl.textContent = `Uploaded. Waiting for others (${u}/${n})…`;
     }
     if (submitBtn instanceof HTMLButtonElement) {
@@ -129,7 +149,12 @@ export function mountUploadScreen(root, ctx) {
 
   const tick = () => {
     const remain = deadlineTs - Date.now() / 1000;
-    updatePhaseTimerBar(root, "mp-upload-phase", uploadTotalSec, Math.max(0, remain));
+    updatePhaseTimerBar(
+      root,
+      "mp-upload-phase",
+      uploadTotalSec,
+      Math.max(0, remain),
+    );
     if (!closedNotified && remain <= 0) {
       closedNotified = true;
       if (statusEl && !statusEl.textContent.includes("Uploaded")) {
@@ -191,16 +216,22 @@ export function mountUploadScreen(root, ctx) {
     fd.append("player_id", playerId);
     fd.append("file", file);
     try {
-      const res = await fetch(`${ctx.apiBase}/upload/beat/${encodeURIComponent(lobbyId)}`, {
-        method: "POST",
-        headers: authHeadersMultipart(),
-        body: fd,
-      });
+      const res = await fetch(
+        `${ctx.apiBase}/upload/beat/${encodeURIComponent(lobbyId)}`,
+        {
+          method: "POST",
+          headers: authHeadersMultipart(),
+          body: fd,
+        },
+      );
       if (!res.ok) {
         const t = await res.text();
         throw new Error(t || res.statusText);
       }
-      lobbyView = applyMatchWsToLobby(lobbyView, { type: "beat_uploaded", player_id: playerId });
+      lobbyView = applyMatchWsToLobby(lobbyView, {
+        type: "beat_uploaded",
+        player_id: playerId,
+      });
       syncProgressHint();
       syncSelfUploadUi();
     } catch (err) {
