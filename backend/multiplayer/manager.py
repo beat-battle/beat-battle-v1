@@ -396,23 +396,26 @@ class LobbyManager:
 
         Pre-game (waiting / lobby / generating): treat like an intentional leave — full disconnect so
         players can browse lobbies without a reconnect window.
+
+        Results: match is over — same as pre-game (no menu reconnect prompt after leaving / tab close).
         """
         if self.player_ws.get(player_id) is not ws:
             return
         self.detach_ws(player_id)
 
-        pre_game_drop = False
+        immediate_leave = False
         async with self._with_player_lobby_lock(player_id):
             lid = self.player_lobby.get(player_id)
             lobby = self.lobbies.get(lid) if lid else None
             if lobby is not None and player_id in lobby.players:
-                pre_game_drop = lobby.state in (
+                immediate_leave = lobby.state in (
                     LobbyState.WAITING,
                     LobbyState.LOBBY,
                     LobbyState.GENERATING,
+                    LobbyState.RESULTS,
                 )
 
-        if pre_game_drop:
+        if immediate_leave:
             await self.disconnect(player_id)
             return
 
@@ -1515,7 +1518,7 @@ class LobbyManager:
     async def handle_leave_lobby(
         self, player_id: str, websocket: WebSocket | None
     ) -> bool:
-        """Pre-game: hard disconnect. In-match: soft detach (grace) — same as losing the socket."""
+        """Pre-game and results: hard disconnect. Other in-match: soft detach (grace) — same as losing the socket."""
         lid = self.player_lobby.get(player_id)
         lobby = self.lobbies.get(lid) if lid else None
         pre_game = False
