@@ -34,6 +34,9 @@ _WS_TICKET_TTL_S = 30
 _ws_ticket_consumed: dict[str, float] = {}
 _ws_ticket_lock = threading.Lock()
 _MAX_WS_JTI_LEN = 128
+_USER_CACHE_TTL_S = 45.0
+_user_cache: dict[int, tuple[User, float]] = {}
+_user_cache_lock = threading.Lock()
 
 security = HTTPBearer(auto_error=False)
 
@@ -114,6 +117,29 @@ def get_user_by_id(db: Session, user_id: int) -> User | None:
     return db.get(User, user_id)
 
 
+def _cached_user_get(user_id: int) -> User | None:
+    now = time.monotonic()
+    with _user_cache_lock:
+        hit = _user_cache.get(user_id)
+        if hit is None:
+            return None
+        user, exp = hit
+        if exp <= now:
+            _user_cache.pop(user_id, None)
+            return None
+        return user
+
+
+def _cached_user_put(user: User) -> None:
+    with _user_cache_lock:
+        _user_cache[user.id] = (user, time.monotonic() + _USER_CACHE_TTL_S)
+
+
+def invalidate_user_cache(user_id: int) -> None:
+    with _user_cache_lock:
+        _user_cache.pop(user_id, None)
+
+
 def increment_wins_for_users(db: Session, user_ids: list[int]) -> None:
     seen: set[int] = set()
     for uid in user_ids:
@@ -124,6 +150,8 @@ def increment_wins_for_users(db: Session, user_ids: list[int]) -> None:
         if u is not None:
             u.wins += 1
     db.commit()
+    for uid in seen:
+        invalidate_user_cache(uid)
 
 
 def get_current_user(
@@ -139,9 +167,14 @@ def get_current_user(
         uid = int(payload["sub"])
     except (JWTError, KeyError, ValueError, TypeError):
         raise HTTPException(status_code=401, detail="Invalid or expired token.")
+    cached = _cached_user_get(uid)
+    if cached is not None:
+        return db.merge(cached, load=False)
+
     user = get_user_by_id(db, uid)
     if user is None:
         raise HTTPException(status_code=401, detail="User not found.")
+    _cached_user_put(user)
     return user
 
 

@@ -155,22 +155,25 @@ export function mountAuthCornerMenu(ctx, opts = {}) {
 }
 
 /**
- * Guest: LB or Home + login + register.
+ * Guest: login + register; on leaderboard screen also Home (main menu has its own LB under Play).
  * @param {{ navigate: function }} ctx
  * @param {{ showHome?: boolean }} [opts] — true on leaderboard screen (Home → menu)
  */
 export function mountAuthCornerGuest(ctx, opts = {}) {
   const showHome = Boolean(opts.showHome);
   const el = ensureCornerEl();
-  const primaryId = showHome ? "auth-corner-home" : "auth-corner-lb";
-  const primaryLabel = showHome ? "Home" : "Leaderboard";
+
+  const buttonsHtml = showHome
+    ? `<button type="button" class="auth-corner-btn" id="auth-corner-home">Home</button>
+        <button type="button" class="auth-corner-btn" id="auth-corner-login">Login</button>
+        <button type="button" class="auth-corner-btn" id="auth-corner-reg">Register</button>`
+    : `<button type="button" class="auth-corner-btn" id="auth-corner-login">Login</button>
+        <button type="button" class="auth-corner-btn" id="auth-corner-reg">Register</button>`;
 
   el.innerHTML = `
     <div class="auth-corner-stack">
       <div class="auth-corner-actions auth-corner-actions--guest auth-corner-actions--wide">
-        <button type="button" class="auth-corner-btn" id="${primaryId}">${primaryLabel}</button>
-        <button type="button" class="auth-corner-btn" id="auth-corner-login">Login</button>
-        <button type="button" class="auth-corner-btn" id="auth-corner-reg">Register</button>
+        ${buttonsHtml}
       </div>
     </div>
   `;
@@ -180,13 +183,6 @@ export function mountAuthCornerGuest(ctx, opts = {}) {
       playSfxMinor();
       import("./screens/modeSelect.js").then((m) =>
         ctx.navigate(m.mountModeSelectScreen),
-      );
-    });
-  } else {
-    el.querySelector("#auth-corner-lb")?.addEventListener("click", () => {
-      playSfxMajor();
-      import("./screens/leaderboardScreen.js").then((m) =>
-        ctx.navigate(m.mountLeaderboardScreen),
       );
     });
   }

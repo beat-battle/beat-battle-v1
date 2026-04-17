@@ -232,6 +232,7 @@ export function mountUploadScreen(root, ctx) {
       });
     },
     4500,
+    () => ctx.mpWs?.readyState !== WebSocket.OPEN,
   );
 
   form?.addEventListener("submit", async (e) => {

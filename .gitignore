@@ -1,6 +1,12 @@
 cookup.db
 docs/
-misc/
+trap/
+test-server/
+.ruff_cache/
+
+_pycache_/
+generated/
+
 uploads/
 __pycache__/
 *.pyc

@@ -270,6 +270,7 @@ async function buildKitClientSide(root, ctx, start, opts) {
       }
     },
     4500,
+    () => ctx.mpWs?.readyState !== WebSocket.OPEN,
   );
 
   try {
@@ -427,6 +428,7 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
       }
     },
     5000,
+    () => ctx.mpWs?.readyState !== WebSocket.OPEN,
   );
 
   const bindWaveformPlayback = (key, waveWrap, audio) => {

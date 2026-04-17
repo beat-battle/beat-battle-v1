@@ -221,6 +221,7 @@ export function mountVoteSelectionScreen(root, ctx) {
       });
     },
     4500,
+    () => ctx.mpWs?.readyState !== WebSocket.OPEN,
   );
 
   const setVoteCardsLocked = (locked) => {

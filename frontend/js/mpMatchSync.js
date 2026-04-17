@@ -23,12 +23,19 @@ export async function fetchMatchSync(lobbyId) {
  * @param {string} lobbyId
  * @param {(sync: Record<string, unknown>) => void} onSync
  * @param {number} [intervalMs]
+ * @param {() => boolean} [shouldPoll]
  * @returns {() => void} stop
  */
-export function pollMatchSync(lobbyId, onSync, intervalMs = DEFAULT_POLL_MS) {
+export function pollMatchSync(
+  lobbyId,
+  onSync,
+  intervalMs = DEFAULT_POLL_MS,
+  shouldPoll = () => true,
+) {
   let stopped = false;
   const tick = async () => {
     if (stopped) return;
+    if (!shouldPoll()) return;
     const sync = await fetchMatchSync(lobbyId);
     if (stopped || !sync) return;
     onSync(sync);

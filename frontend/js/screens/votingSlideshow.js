@@ -251,6 +251,7 @@ export function mountVotingSlideshowScreen(root, ctx) {
       });
     },
     4500,
+    () => ctx.mpWs?.readyState !== WebSocket.OPEN,
   );
 
   root.innerHTML = `

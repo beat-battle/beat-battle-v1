@@ -29,8 +29,17 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    username: str
+    username: str = Field(..., min_length=1)
     password: str
+
+    @field_validator("username")
+    @classmethod
+    def username_strip(cls, v: str) -> str:
+        # RegisterRequest normalizes with strip(); login must match so lookups succeed.
+        s = v.strip()
+        if not s:
+            raise ValueError("Username required.")
+        return s
 
 
 class TokenResponse(BaseModel):

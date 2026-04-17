@@ -145,6 +145,9 @@ export function mountMpChat({ ws, getWs, playerId, continueSession = false }) {
   if (!continueSession) {
     clearMpChatSession();
   }
+  // Defensive singleton: reconnect/screen races should never leave stale panels behind.
+  document.querySelectorAll(".mp-chat").forEach((node) => node.remove());
+  document.body.classList.remove("mp-chat-open");
   const wrap = document.createElement("div");
   wrap.className = "mp-chat";
   wrap.setAttribute("aria-label", "Match chat");

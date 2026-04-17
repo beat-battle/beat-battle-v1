@@ -3,7 +3,7 @@ Lobby matchmaking, timers, broadcasts, state transitions.
 Thin orchestration layer — parsing/constants live in manager_helpers.py, match phases in manager_phases.py.
 
 Concurrency mental model (read this before you "fix" a race):
-- One asyncio.Lock wraps basically all mutating paths. Boring but predictable :)
+- Meta + per-lobby locks: global maps use _meta_lock; in-lobby mutations use a lobby lock.
 - Phase work runs in asyncio Tasks (_cook_tasks / _upload_tasks / _vote_tasks). Rematch replaces a task —
   always cancel the old one in finally *only* if this task is still the registered one (see phases file).
 - DB hits that could block use asyncio.to_thread or a tiny sync helper — never block the event loop for SQL.
@@ -12,6 +12,7 @@ Concurrency mental model (read this before you "fix" a race):
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 import json
 import math
 import random
@@ -58,8 +59,8 @@ MP_WS_GRACE_S = 120.0
 class LobbyManager:
     def __init__(self, uploads_root: Path) -> None:
         self.uploads_root = uploads_root
-        # Single lock for in-memory lobby mutations — keeps races boring (see module docstring)
-        self._lock = asyncio.Lock()
+        self._meta_lock = asyncio.Lock()
+        self._lobby_locks: dict[str, asyncio.Lock] = {}
         self.lobbies: dict[str, Lobby] = {}
         # player_id -> lobby_id so we don't scan every lobby on every message
         self.player_lobby: dict[str, str] = {}
@@ -77,6 +78,31 @@ class LobbyManager:
         # R2 direct-upload: idempotent complete per (lobby_id, player_id, upload_id)
         self._r2_beat_complete: set[tuple[str, str, str]] = set()
         self._r2_beat_complete_meta: dict[tuple[str, str, str], dict[str, Any]] = {}
+
+    def _ensure_lobby_lock_unlocked(self, lobby_id: str) -> asyncio.Lock:
+        lock = self._lobby_locks.get(lobby_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._lobby_locks[lobby_id] = lock
+        return lock
+
+    @asynccontextmanager
+    async def _with_lobby_lock(self, lobby_id: str):
+        async with self._meta_lock:
+            lock = self._ensure_lobby_lock_unlocked(lobby_id)
+        async with lock:
+            yield
+
+    @asynccontextmanager
+    async def _with_player_lobby_lock(self, player_id: str):
+        async with self._meta_lock:
+            lobby_id = self.player_lobby.get(player_id)
+            if not lobby_id:
+                yield None
+                return
+            lock = self._ensure_lobby_lock_unlocked(lobby_id)
+        async with lock:
+            yield lobby_id
 
     def register_auth_session(
         self, player_id: str, user_id: int, username: str
@@ -280,8 +306,6 @@ class LobbyManager:
             lobby = self.lobbies.get(lid)
             if not lobby or pid not in lobby.players:
                 continue
-            if lobby.state == LobbyState.RESULTS:
-                continue
             until = self._grace_deadline_ts.get(pid)
             if until is None:
                 until = now + MP_WS_GRACE_S
@@ -323,7 +347,7 @@ class LobbyManager:
         websocket: WebSocket,
     ) -> tuple[bool, str | None]:
         """Reconnect with ?resume_player_id= — same seat, new socket. Closes the old ws if it still hung around."""
-        async with self._lock:
+        async with self._with_player_lobby_lock(resume_player_id):
             uid = self.auth_user_id.get(resume_player_id)
             un = self.auth_username.get(resume_player_id)
             if uid is None or uid != user_id:
@@ -378,7 +402,7 @@ class LobbyManager:
         self.detach_ws(player_id)
 
         pre_game_drop = False
-        async with self._lock:
+        async with self._with_player_lobby_lock(player_id):
             lid = self.player_lobby.get(player_id)
             lobby = self.lobbies.get(lid) if lid else None
             if lobby is not None and player_id in lobby.players:
@@ -513,7 +537,7 @@ class LobbyManager:
         user_id, display_name = sess
         wins = await asyncio.to_thread(fetch_user_wins_sync, user_id)
         host_spice = sorted(spices)[0]
-        async with self._lock:
+        async with self._meta_lock:
             if player_id in self.player_lobby:
                 await self.send_player_error(player_id, "Already in a lobby.")
                 return
@@ -537,7 +561,7 @@ class LobbyManager:
             return
         user_id, display_name = sess
         wins = await asyncio.to_thread(fetch_user_wins_sync, user_id)
-        async with self._lock:
+        async with self._meta_lock:
             if player_id in self.player_lobby:
                 await self.send_player_error(player_id, "Already in a lobby.")
                 return
@@ -583,7 +607,7 @@ class LobbyManager:
             return
         user_id, display_name = sess
         wins = await asyncio.to_thread(fetch_user_wins_sync, user_id)
-        async with self._lock:
+        async with self._meta_lock:
             if player_id in self.player_lobby:
                 await self.send_player_error(player_id, "Already in a lobby.")
                 return
@@ -640,7 +664,7 @@ class LobbyManager:
 
     async def is_public_lobby_joinable(self, lobby_id: str) -> bool:
         """Preflight for public list joins; does not leak private lobbies (False if not listable)."""
-        async with self._lock:
+        async with self._meta_lock:
             key = self._resolve_lobby_key(lobby_id)
             if key is None:
                 return False
@@ -648,7 +672,7 @@ class LobbyManager:
             return self._lobby_is_public_joinable(lobby)
 
     async def public_lobby_list(self) -> list[dict[str, Any]]:
-        async with self._lock:
+        async with self._meta_lock:
             out: list[dict[str, Any]] = []
             for lid, L in self.lobbies.items():
                 if not self._lobby_is_public_joinable(L):
@@ -683,8 +707,7 @@ class LobbyManager:
 
     async def set_cook_duration(self, player_id: str, raw_minutes: Any) -> None:
         norm = normalize_cook_duration_min(raw_minutes)
-        async with self._lock:
-            lobby_id = self.player_lobby.get(player_id)
+        async with self._with_player_lobby_lock(player_id) as lobby_id:
             if not lobby_id:
                 return
             lobby = self.lobbies.get(lobby_id)
@@ -715,8 +738,7 @@ class LobbyManager:
 
     async def set_anonymous_voting(self, player_id: str, raw_enabled: Any) -> None:
         enabled = coerce_bool(raw_enabled, default=False)
-        async with self._lock:
-            lobby_id = self.player_lobby.get(player_id)
+        async with self._with_player_lobby_lock(player_id) as lobby_id:
             if not lobby_id:
                 return
             lobby = self.lobbies.get(lobby_id)
@@ -746,7 +768,7 @@ class LobbyManager:
         err_code: str | None = None
         lobby_id_ok: str | None = None
         target_ok: str | None = None
-        async with self._lock:
+        async with self._with_player_lobby_lock(host_id):
             if not target_id or target_id == host_id:
                 err = "Can't kick yourself."
                 err_code = "KICK_SELF"
@@ -784,8 +806,7 @@ class LobbyManager:
         await self.disconnect(target_ok)
 
     async def player_cook_finished(self, player_id: str) -> None:
-        async with self._lock:
-            lobby_id = self.player_lobby.get(player_id)
+        async with self._with_player_lobby_lock(player_id) as lobby_id:
             if not lobby_id:
                 return
             lobby = self.lobbies.get(lobby_id)
@@ -809,8 +830,7 @@ class LobbyManager:
         )
 
     async def player_ready(self, player_id: str) -> None:
-        async with self._lock:
-            lobby_id = self.player_lobby.get(player_id)
+        async with self._with_player_lobby_lock(player_id) as lobby_id:
             if not lobby_id:
                 return
             lobby = self.lobbies.get(lobby_id)
@@ -831,7 +851,7 @@ class LobbyManager:
         await self._try_start_game(lobby_id)
 
     async def _try_start_game(self, lobby_id: str) -> None:
-        async with self._lock:
+        async with self._with_lobby_lock(lobby_id):
             lobby = self.lobbies.get(lobby_id)
             if not lobby or lobby.state != LobbyState.LOBBY:
                 return
@@ -869,7 +889,7 @@ class LobbyManager:
         self._cook_tasks[lobby_id] = asyncio.create_task(cook_loop(self, lobby_id))
 
     async def record_upload(self, lobby_id: str, player_id: str) -> None:
-        async with self._lock:
+        async with self._with_lobby_lock(lobby_id):
             lobby = self.lobbies.get(lobby_id)
             if not lobby or lobby.state != LobbyState.UPLOAD:
                 return
@@ -919,8 +939,7 @@ class LobbyManager:
     async def slideshow_complete(self, player_id: str) -> None:
         """Slideshow done — can vote early if everyone skipped ahead."""
         bump: tuple[str, float] | None = None
-        async with self._lock:
-            lobby_id = self.player_lobby.get(player_id)
+        async with self._with_player_lobby_lock(player_id) as lobby_id:
             if not lobby_id:
                 return
             lobby = self.lobbies.get(lobby_id)
@@ -965,8 +984,7 @@ class LobbyManager:
             return
 
         now = time.time()
-        async with self._lock:
-            lobby_id = self.player_lobby.get(player_id)
+        async with self._with_player_lobby_lock(player_id) as lobby_id:
             if not lobby_id:
                 return
             lobby = self.lobbies.get(lobby_id)
@@ -1032,8 +1050,7 @@ class LobbyManager:
         if not tid:
             await self.send_player_error(player_id, "Missing beat target.")
             return
-        async with self._lock:
-            lobby_id = self.player_lobby.get(player_id)
+        async with self._with_player_lobby_lock(player_id) as lobby_id:
             if not lobby_id:
                 return
             lobby = self.lobbies.get(lobby_id)
@@ -1064,8 +1081,7 @@ class LobbyManager:
         )
 
     async def cast_vote(self, player_id: str, target_player_id: str) -> None:
-        async with self._lock:
-            lobby_id = self.player_lobby.get(player_id)
+        async with self._with_player_lobby_lock(player_id) as lobby_id:
             if not lobby_id:
                 await self.send_player_error(player_id, "Not in a lobby.")
                 return
@@ -1108,7 +1124,7 @@ class LobbyManager:
         )
 
         snap_after: dict[str, Any] | None = None
-        async with self._lock:
+        async with self._with_lobby_lock(lobby_id):
             lobby_snap = self.lobbies.get(lobby_id)
             if lobby_snap:
                 snap_after = lobby_snap.lobby_snapshot()
@@ -1119,7 +1135,7 @@ class LobbyManager:
             )
 
         should_finalize = False
-        async with self._lock:
+        async with self._with_lobby_lock(lobby_id):
             lobby = self.lobbies.get(lobby_id)
             if not lobby:
                 return
@@ -1148,7 +1164,7 @@ class LobbyManager:
 
     async def _rematch_to_new_lobby(self, old_id: str) -> None:
         new_id: str | None = None
-        async with self._lock:
+        async with self._meta_lock:
             old = self.lobbies.get(old_id)
             if not old or old.state != LobbyState.RESULTS:
                 return
@@ -1175,6 +1191,7 @@ class LobbyManager:
             del self.lobbies[old_id]
 
         self._delete_lobby_upload_dir_only(old_id)
+        self._lobby_locks.pop(old_id, None)
         if beats_r2.r2_capabilities()["r2_direct"]:
             await asyncio.to_thread(beats_r2.r2_delete_lobby_objects, old_id)
         if new_id is not None:
@@ -1192,7 +1209,7 @@ class LobbyManager:
         voter_id = ""
         broadcast_vote = False
         all_voted = False
-        async with self._lock:
+        async with self._with_player_lobby_lock(player_id):
             lid = self.player_lobby.get(player_id)
             if not lid:
                 err = "Not in a lobby."
@@ -1242,7 +1259,7 @@ class LobbyManager:
         left_name = ""
         state_after: LobbyState | None = None
         lobby: Lobby | None = None
-        async with self._lock:
+        async with self._meta_lock:
             lobby_id = self.player_lobby.pop(player_id, None)
             self.detach_ws(player_id)
             if lobby_id:
@@ -1286,7 +1303,7 @@ class LobbyManager:
         if state_after == LobbyState.RESULTS and left_count > 0:
             rematch_voted: list[str] = []
             do_rematch = False
-            async with self._lock:
+            async with self._with_lobby_lock(lobby_id):
                 lobby_res = self.lobbies.get(lobby_id)
                 if lobby_res:
                     lobby_res.rematch_pending.intersection_update(
@@ -1314,7 +1331,7 @@ class LobbyManager:
         # Last missing voter left — everyone still in the lobby has already voted.
         if state_after == LobbyState.VOTING and left_count > 0:
             should_finalize = False
-            async with self._lock:
+            async with self._with_lobby_lock(lobby_id):
                 lobby_v = self.lobbies.get(lobby_id)
                 if lobby_v and lobby_v.state == LobbyState.VOTING:
                     beat_owners = set(lobby_v.uploaded)
@@ -1347,7 +1364,7 @@ class LobbyManager:
         if state_after == LobbyState.COOKING:
             finished_ids: list[str] = []
             n_cook = 0
-            async with self._lock:
+            async with self._with_lobby_lock(lobby_id):
                 lobby_c = self.lobbies.get(lobby_id)
                 if lobby_c:
                     finished_ids = sorted(lobby_c.cook_finished)
@@ -1369,7 +1386,7 @@ class LobbyManager:
             await self._try_start_game(lobby_id)
 
     async def _dissolve_lobby(self, lobby_id: str) -> None:
-        async with self._lock:
+        async with self._meta_lock:
             lobby = self.lobbies.pop(lobby_id, None)
             if not lobby:
                 return
@@ -1386,7 +1403,7 @@ class LobbyManager:
         await self._purge_lobby(lobby_id, remove_dir=True)
 
     async def _dissolve_results_solo_player(self, lobby_id: str) -> None:
-        async with self._lock:
+        async with self._meta_lock:
             lobby = self.lobbies.pop(lobby_id, None)
             if not lobby:
                 return
@@ -1403,7 +1420,7 @@ class LobbyManager:
         await self._purge_lobby(lobby_id, remove_dir=True)
 
     async def _end_match_only_player_left(self, lobby_id: str) -> None:
-        async with self._lock:
+        async with self._meta_lock:
             lobby = self.lobbies.pop(lobby_id, None)
             if not lobby:
                 return
@@ -1444,7 +1461,7 @@ class LobbyManager:
         if beats_r2.r2_capabilities()["r2_direct"]:
             await asyncio.to_thread(beats_r2.r2_delete_lobby_objects, lobby_id)
         old: Lobby | None = None
-        async with self._lock:
+        async with self._meta_lock:
             old = self.lobbies.pop(lobby_id, None)
             if old:
                 for pid in old.players:
@@ -1452,6 +1469,7 @@ class LobbyManager:
         if old:
             for pid in old.players:
                 self.pop_auth_session(pid)
+        self._lobby_locks.pop(lobby_id, None)
 
     def _unlink_player_beat_upload(self, lobby_id: str, player_id: str) -> None:
         base = self.uploads_root / lobby_id
@@ -1485,7 +1503,7 @@ class LobbyManager:
     async def cleanup_stale(self) -> None:
         # Garbage collector for abandoned results screens — runs on a timer from main.py
         now = time.time()
-        async with self._lock:
+        async with self._meta_lock:
             to_drop: list[str] = []
             for lid, L in self.lobbies.items():
                 if L.state == LobbyState.RESULTS and L.results_at:
