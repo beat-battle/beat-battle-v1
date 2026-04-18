@@ -87,7 +87,8 @@ export function mountAuthCornerMenu(ctx, opts = {}) {
   const primaryId = primary === "home" ? "auth-corner-home" : "auth-corner-lb";
 
   const actionsHtml = logoutOnly
-    ? `<button type="button" class="auth-corner-btn" id="auth-corner-out">Logout</button>`
+    ? `<button type="button" class="auth-corner-btn" id="auth-corner-profile">Profile</button>
+        <button type="button" class="auth-corner-btn" id="auth-corner-out">Logout</button>`
     : `<button type="button" class="auth-corner-btn" id="auth-corner-profile">Profile</button>
         <button type="button" class="auth-corner-btn" id="${primaryId}">${primaryLabel}</button>
         <button type="button" class="auth-corner-btn" id="auth-corner-out">Logout</button>`;
@@ -125,6 +126,17 @@ export function mountAuthCornerMenu(ctx, opts = {}) {
       if (winsEl) winsEl.textContent = "";
     });
 
+  el.querySelector("#auth-corner-profile")?.addEventListener("click", () => {
+    playSfxMinor();
+    const un = ctx.username || "";
+    if (un) {
+      history.pushState({ profile: un }, "", `/@${un}`);
+    }
+    import("./screens/profileScreen.js").then((m) =>
+      ctx.navigate(m.mountProfileScreen, { profileUsername: un }),
+    );
+  });
+
   if (!logoutOnly) {
     if (primary === "home") {
       el.querySelector("#auth-corner-home")?.addEventListener("click", () => {
@@ -141,17 +153,6 @@ export function mountAuthCornerMenu(ctx, opts = {}) {
         );
       });
     }
-
-    el.querySelector("#auth-corner-profile")?.addEventListener("click", () => {
-      playSfxMinor();
-      const un = ctx.username || "";
-      if (un) {
-        history.pushState({ profile: un }, "", `/@${un}`);
-      }
-      import("./screens/profileScreen.js").then((m) =>
-        ctx.navigate(m.mountProfileScreen, { profileUsername: un }),
-      );
-    });
   }
 
   el.querySelector("#auth-corner-out")?.addEventListener("click", () => {
