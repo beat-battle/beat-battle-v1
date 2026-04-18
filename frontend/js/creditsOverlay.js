@@ -17,7 +17,7 @@ const CREDITS = [
   },
   {
     name: "dracocaine",
-    contribution: "Network and Connections | Discord Admin | General helper",
+    contribution: "Network and Connections | Community Strategist | Visionary",
   },
   {
     name: "lukasz",

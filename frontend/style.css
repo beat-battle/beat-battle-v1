@@ -30,8 +30,8 @@
   --text-muted: #9a9a9a;
   --text-heading: #ffffff;
   /* Subtle 1px extrusion (matches arcade title) */
-  --ui-text-depth: 1px 1px 0 #747474;
-  --ui-red-name-depth: 1px 1px 0 rgba(138, 9, 9, 0.92);
+  --ui-text-depth: 1.5px 1.5px 0 #747474;
+  --ui-red-name-depth: 1.5px 1.5px 0 rgba(138, 9, 9, 0.92);
 }
 
 /* Hero / heading light type — shared 1px extrusion */
