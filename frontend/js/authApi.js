@@ -2,6 +2,7 @@
  * Token in localStorage, fetch wrappers, the boring stuff.
  */
 import { getApiBase } from "./apiOrigin.js";
+import { apiFetch } from "./apiFetch.js";
 
 const TOKEN_KEY = "cookup_token";
 const USERNAME_KEY = "cookup_username";
@@ -56,7 +57,7 @@ export async function validateSession() {
   if (!t) return false;
   const base = getApiBase();
   try {
-    const res = await fetch(`${base}/me`, { headers: authBearerOnly() });
+    const res = await apiFetch(`${base}/me`, { headers: authBearerOnly() });
     if (res.status === 401) {
       clearAuthSession();
       return false;
@@ -69,7 +70,7 @@ export async function validateSession() {
 
 export async function registerUser(username, password) {
   const base = getApiBase();
-  const res = await fetch(`${base}/register`, {
+  const res = await apiFetch(`${base}/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
@@ -93,7 +94,7 @@ export async function registerUser(username, password) {
 
 export async function loginUser(username, password) {
   const base = getApiBase();
-  const res = await fetch(`${base}/login`, {
+  const res = await apiFetch(`${base}/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
@@ -113,7 +114,7 @@ export async function loginUser(username, password) {
 
 export async function fetchLeaderboard() {
   const base = getApiBase();
-  const res = await fetch(`${base}/leaderboard`);
+  const res = await apiFetch(`${base}/leaderboard`);
   if (!res.ok) throw new Error((await res.text()) || res.statusText);
   return res.json();
 }
@@ -121,7 +122,7 @@ export async function fetchLeaderboard() {
 /** /me — who am I? Needs Bearer. */
 export async function fetchMe() {
   const base = getApiBase();
-  const res = await fetch(`${base}/me`, { headers: authBearerOnly() });
+  const res = await apiFetch(`${base}/me`, { headers: authBearerOnly() });
   if (!res.ok) throw new Error((await res.text()) || res.statusText);
   return res.json();
 }

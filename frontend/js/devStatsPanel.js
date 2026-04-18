@@ -2,6 +2,7 @@
  * Slide-out numbers for us — the API still checks you're on the list.
  */
 import { getApiBase } from "./apiOrigin.js";
+import { apiFetch } from "./apiFetch.js";
 import { authBearerOnly, getUsername, isLoggedIn } from "./authApi.js";
 import { refreshSupportersFromApi } from "./supporters.js";
 
@@ -120,7 +121,7 @@ async function updateDevSupporterListRow(panelEl) {
   const listEl = panelEl.querySelector("#dev-supporter-list");
   if (!listEl) return;
   const base = getApiBase();
-  const res = await fetch(`${base}/api/supporters`);
+  const res = await apiFetch(`${base}/api/supporters`);
   if (!res.ok) {
     listEl.textContent = "—";
     return;
@@ -226,7 +227,7 @@ async function fetchOnce() {
     return;
   }
   const base = getApiBase();
-  const res = await fetch(`${base}/api/dev/site-stats`, {
+  const res = await apiFetch(`${base}/api/dev/site-stats`, {
     headers: authBearerOnly(),
   });
   if (res.status === 401 || res.status === 403) {
@@ -261,6 +262,14 @@ export function initDevStatsPanel() {
 }
 
 export function recordPageVisit() {
+  // One visit per browser session — spam-refresh won't hammer the server.
+  const SK = "bb_visit_recorded";
+  try {
+    if (sessionStorage.getItem(SK)) return;
+    sessionStorage.setItem(SK, "1");
+  } catch {
+    /* private mode — fire anyway, server-side rate limit will catch it */
+  }
   const base = getApiBase();
   void fetch(`${base}/api/stats/visit`, { method: "POST" }).catch(() => {});
 }

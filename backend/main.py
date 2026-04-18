@@ -45,6 +45,7 @@ from sqlalchemy.orm import Session
 
 from .auth import create_ws_ticket, get_current_user, invalidate_user_cache, login_user, register_user
 from . import beats_r2
+from .http_rate_limit import IPRateLimitMiddleware
 from . import avatar_r2
 from .beat_upload_trim import trim_beat_upload_to_ogg
 from .database import get_db, init_db
@@ -194,16 +195,48 @@ def _normalize_supporter_name(raw: str) -> str:
     return s
 
 
-def _increment_total_visits(db: Session) -> int:
-    row = db.get(SiteStats, 1)
-    if row is None:
-        row = SiteStats(id=1, total_visits=0)
-        db.add(row)
-        db.flush()
-    row.total_visits += 1
-    db.commit()
-    db.refresh(row)
-    return int(row.total_visits)
+# ---- Batched visit counter (avoids DB write per page refresh) ----
+_visit_counter_pending: int = 0
+_visit_counter_lock = asyncio.Lock()
+_VISIT_FLUSH_INTERVAL_S = 30.0
+_VISIT_FLUSH_THRESHOLD = 50
+
+
+async def _flush_visits() -> None:
+    """Move pending in-memory count into the DB in one write."""
+    global _visit_counter_pending
+    async with _visit_counter_lock:
+        if _visit_counter_pending <= 0:
+            return
+        batch = _visit_counter_pending
+        _visit_counter_pending = 0
+    db = next(get_db())
+    try:
+        row = db.get(SiteStats, 1)
+        if row is None:
+            row = SiteStats(id=1, total_visits=0)
+            db.add(row)
+            db.flush()
+        row.total_visits += batch
+        db.commit()
+    finally:
+        db.close()
+
+
+async def _increment_visit_batched() -> int:
+    """Bump in-memory counter; auto-flush if threshold hit."""
+    global _visit_counter_pending
+    async with _visit_counter_lock:
+        _visit_counter_pending += 1
+        pending = _visit_counter_pending
+    if pending >= _VISIT_FLUSH_THRESHOLD:
+        await _flush_visits()
+    # Return approximate total (unflushed + DB).
+    db = next(get_db())
+    try:
+        return _get_total_visits(db) + pending
+    finally:
+        db.close()
 
 
 def _get_total_visits(db: Session) -> int:
@@ -223,13 +256,33 @@ async def lifespan(app: FastAPI):
             await asyncio.sleep(120)
             await manager.cleanup_stale()
 
+    async def visit_flush_loop() -> None:
+        """Periodically flush batched visit counter to DB."""
+        while True:
+            await asyncio.sleep(_VISIT_FLUSH_INTERVAL_S)
+            try:
+                await _flush_visits()
+            except Exception:
+                pass
+
     task = asyncio.create_task(cleanup_loop())
+    visit_task = asyncio.create_task(visit_flush_loop())
     await asyncio.to_thread(get_kit_manifest_cached)
     await asyncio.to_thread(get_kit_manifest_for_genre, "edm")
     yield
+    # Flush remaining visits before shutdown
+    try:
+        await _flush_visits()
+    except Exception:
+        pass
     task.cancel()
+    visit_task.cancel()
     try:
         await task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await visit_task
     except asyncio.CancelledError:
         pass
 
@@ -301,6 +354,7 @@ class StaticCacheControlMiddleware:
 
 
 app.add_middleware(StaticCacheControlMiddleware)
+app.add_middleware(IPRateLimitMiddleware, rate=30, window_s=10.0)
 
 _LOGIN_LIMIT = SlidingWindowRateLimiter(max_events=10, window_s=60.0)
 _REGISTER_LIMIT = SlidingWindowRateLimiter(max_events=5, window_s=60.0)
@@ -348,9 +402,13 @@ def health() -> dict[str, str]:
 
 
 @app.post("/api/stats/visit")
-def post_stats_visit(db: Session = Depends(get_db)) -> dict[str, int]:
-    """Increment once per frontend boot (full page load)."""
-    total = _increment_total_visits(db)
+async def post_stats_visit() -> dict[str, int]:
+    """Increment once per frontend boot (full page load).
+
+    Writes are batched in memory and flushed periodically to avoid
+    hammering the DB when users spam-refresh.
+    """
+    total = await _increment_visit_batched()
     return {"total_visits": total}
 
 
@@ -430,7 +488,7 @@ def post_register(
 ) -> RegisterResponse:
     ip = (request.client.host if request.client else "unknown")
     if not _REGISTER_LIMIT.check(f"reg:{ip}"):
-        raise HTTPException(status_code=429, detail="Too many registrations. Try again later.")
+        raise HTTPException(status_code=429, detail="Too many registrations. Try again later.", headers={"Retry-After": "10"})
     return register_user(db, body)
 
 
@@ -440,7 +498,7 @@ def post_login(
 ) -> TokenResponse:
     ip = (request.client.host if request.client else "unknown")
     if not _LOGIN_LIMIT.check(f"login:{ip}"):
-        raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
+        raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.", headers={"Retry-After": "5"})
     return login_user(db, body)
 
 
@@ -1028,7 +1086,7 @@ def post_profile_comment(
 ) -> ProfileCommentOut:
     ip = request.client.host if request.client else "unknown"
     if not _COMMENT_LIMIT.check(f"comment:{user.id}:{ip}"):
-        raise HTTPException(status_code=429, detail="Too many comments. Try again later.")
+        raise HTTPException(status_code=429, detail="Too many comments. Try again later.", headers={"Retry-After": "10"})
     target = (
         db.query(User)
         .filter(func.lower(User.username) == username.strip().lower())

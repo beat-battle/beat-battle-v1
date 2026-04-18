@@ -2,6 +2,7 @@
  * Preflight for joining a public lobby by id (server list). Uses the same rules as GET /api/lobbies.
  */
 import { getApiBase } from "./apiOrigin.js";
+import { apiFetch } from "./apiFetch.js";
 
 /**
  * @param {string} lobbyId
@@ -12,7 +13,7 @@ export async function fetchPublicLobbyJoinable(lobbyId) {
   if (raw.length < 3) return false;
   try {
     const base = getApiBase();
-    const res = await fetch(
+    const res = await apiFetch(
       `${base}/api/lobbies/joinable/${encodeURIComponent(raw)}`,
       { method: "GET", cache: "no-store" },
     );

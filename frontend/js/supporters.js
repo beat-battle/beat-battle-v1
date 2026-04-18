@@ -2,6 +2,7 @@
  * Who gets a heart — live list from /api/supporters, hardcoded fallback if that fails.
  */
 import { getApiBase } from "./apiOrigin.js";
+import { apiFetch } from "./apiFetch.js";
 import { escapeHtml } from "./rankUi.js";
 
 export const SUPPORTER_TOOLTIP = "This person is a supporter!";
@@ -54,7 +55,7 @@ function applyKeys(keys) {
 
 async function fetchSupporterKeysFromApi() {
   const base = getApiBase();
-  const res = await fetch(`${base}/api/supporters`);
+  const res = await apiFetch(`${base}/api/supporters`);
   if (!res.ok) throw new Error(String(res.status));
   const data = await res.json();
   const names = Array.isArray(data.names) ? data.names : [];
