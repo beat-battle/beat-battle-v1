@@ -22,6 +22,7 @@ import tempfile
 import time as _time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import unquote
 from typing import Any
 from fastapi import (
     Depends,
@@ -48,9 +49,9 @@ from . import avatar_r2
 from .beat_upload_trim import trim_beat_upload_to_ogg
 from .database import get_db, init_db
 from .generator import generate_kit_light
-from .kit_manifest import get_kit_manifest_cached
+from .kit_manifest import get_kit_manifest_cached, get_kit_manifest_for_genre
 from .kit_payload import encode_paths_to_sounds
-from .models import ProfileComment, SiteStats, Supporter, User
+from .models import ProfileComment, SiteStats, Supporter, User, UserProfileIconOwnership
 from .multiplayer import LobbyManager
 from .multiplayer.lobby import LobbyState
 from .multiplayer.ws import router as ws_router
@@ -72,13 +73,58 @@ from .schemas import (
     RankInfo,
     RegisterRequest,
     RegisterResponse,
+    ShopCatalogItem,
+    ShopPurchaseRequest,
+    ShopPurchaseResponse,
     TokenResponse,
 )
+from .shop_catalog import catalog_public_list, emoji_for_icon_key
+from .shop_purchase import purchase_profile_icon
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 UPLOADS_ROOT = _PROJECT_ROOT / "uploads"
 FRONTEND_ROOT = _PROJECT_ROOT / "frontend"
 _DATASET_ROOT = _PROJECT_ROOT / "dataset"
+
+
+def _resolve_dataset_media_file(rel: str) -> Path | None:
+    """Try CDN-style relative paths and common ``dataset/`` mirror layouts."""
+    rel = rel.replace("\\", "/").strip().lstrip("/")
+    if not rel or ".." in rel.split("/"):
+        return None
+    root = _DATASET_ROOT.resolve()
+
+    def try_file(rel_key: str) -> Path | None:
+        p = (root / rel_key).resolve()
+        try:
+            p.relative_to(root)
+        except ValueError:
+            return None
+        return p if p.is_file() else None
+
+    alts = [rel]
+    if rel.startswith("trap/synths"):
+        alts.append(f"TrapRefined/{rel[len('trap/'):]}")
+    elif rel.startswith("TrapRefined/synths"):
+        alts.append(f"trap/{rel[len('TrapRefined/'):]}")
+    if rel == "TrapRefined" or rel.startswith("TrapRefined/"):
+        alts.append(f"beat-battle-assets/{rel}")
+    if rel == "EDM" or rel.startswith("EDM/"):
+        alts.append(f"beat-battle-assets/{rel}")
+    if rel.startswith("beat-battle-assets/TrapRefined"):
+        alts.append(rel.removeprefix("beat-battle-assets/"))
+    if rel.startswith("beat-battle-assets/EDM/"):
+        alts.append(rel.removeprefix("beat-battle-assets/"))
+
+    seen: set[str] = set()
+    for key in alts:
+        if key in seen:
+            continue
+        seen.add(key)
+        hit = try_file(key)
+        if hit is not None:
+            return hit
+    return None
 
 
 def _static_asset_build() -> str:
@@ -108,6 +154,12 @@ MAX_BEAT_BYTES = 30 * 1024 * 1024
 _ALLOWED_DEV_STATS_USERS = frozenset({"psyalysis", "polystalgia"})
 
 _COMMENT_LIMIT = SlidingWindowRateLimiter(max_events=3, window_s=30.0)
+_SHOP_PURCHASE_LIMIT = SlidingWindowRateLimiter(max_events=20, window_s=60.0)
+
+
+def _shop_purchases_enabled() -> bool:
+    v = os.environ.get("COOKUP_SHOP_PURCHASES_ENABLED", "").strip().lower()
+    return v in ("1", "true", "yes")
 
 
 def get_optional_user(
@@ -173,6 +225,7 @@ async def lifespan(app: FastAPI):
 
     task = asyncio.create_task(cleanup_loop())
     await asyncio.to_thread(get_kit_manifest_cached)
+    await asyncio.to_thread(get_kit_manifest_for_genre, "edm")
     yield
     task.cancel()
     try:
@@ -256,10 +309,10 @@ app.include_router(ws_router)
 
 
 @app.get("/api/kit-manifest", response_class=ORJSONResponse)
-def get_kit_manifest() -> ORJSONResponse:
+def get_kit_manifest(genre: str = Query(default="trap")) -> ORJSONResponse:
     """Sorted dataset media paths per stem; client uses with :func:`pick_index` parity."""
     return ORJSONResponse(
-        get_kit_manifest_cached(),
+        get_kit_manifest_for_genre(genre),
         headers={"Cache-Control": "public, max-age=3600"},
     )
 
@@ -403,7 +456,9 @@ def post_ws_ticket(user: User = Depends(get_current_user)) -> dict[str, str]:
     return {"ticket": ticket}
 
 
-def _me_response_from_user(user: User) -> MeResponse:
+def _me_response_from_user(
+    user: User, owned_profile_icon_keys: list[str]
+) -> MeResponse:
     r = rank_for_wins(user.wins)
     rank = (
         RankInfo(key=r["key"], abbrev=r["abbrev"], label=r["label"], color=r["color"])
@@ -416,12 +471,60 @@ def _me_response_from_user(user: User) -> MeResponse:
         coins=user.coins,
         rank=rank,
         rank_index=rank_index_for_wins(user.wins),
+        profile_icon_key=user.profile_icon_key,
+        owned_profile_icon_keys=owned_profile_icon_keys,
     )
 
 
 @app.get("/me", response_model=MeResponse)
-def get_me(user: User = Depends(get_current_user)) -> MeResponse:
-    return _me_response_from_user(user)
+def get_me(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> MeResponse:
+    owned_rows = (
+        db.query(UserProfileIconOwnership.icon_key)
+        .filter(UserProfileIconOwnership.user_id == user.id)
+        .order_by(UserProfileIconOwnership.icon_key)
+        .all()
+    )
+    owned_keys = [row[0] for row in owned_rows]
+    return _me_response_from_user(user, owned_keys)
+
+
+@app.get("/api/shop/catalog", response_model=list[ShopCatalogItem])
+def get_shop_catalog() -> list[ShopCatalogItem]:
+    return [ShopCatalogItem(**item) for item in catalog_public_list()]
+
+
+@app.post("/api/me/shop/purchase", response_model=ShopPurchaseResponse)
+def post_shop_purchase(
+    body: ShopPurchaseRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ShopPurchaseResponse:
+    if not _shop_purchases_enabled():
+        raise HTTPException(
+            status_code=403, detail="Shop purchases are not available yet."
+        )
+    ip = request.client.host if request.client else "unknown"
+    if not _SHOP_PURCHASE_LIMIT.check(f"shop:{user.id}:{ip}"):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Try again later.",
+        )
+    new_coins, equipped = purchase_profile_icon(db, user.id, body.icon_key)
+    owned_rows = (
+        db.query(UserProfileIconOwnership.icon_key)
+        .filter(UserProfileIconOwnership.user_id == user.id)
+        .order_by(UserProfileIconOwnership.icon_key)
+        .all()
+    )
+    owned_keys = [row[0] for row in owned_rows]
+    return ShopPurchaseResponse(
+        coins=new_coins,
+        profile_icon_key=equipped,
+        owned_profile_icon_keys=owned_keys,
+    )
 
 
 @app.get("/api/me/mp_reconnect_pending", response_class=ORJSONResponse)
@@ -868,6 +971,8 @@ def get_profile(
         rank_index=rank_index_for_wins(user.wins),
         bio=user.bio,
         avatar_url=user.avatar_url,
+        profile_icon_key=user.profile_icon_key,
+        profile_icon_emoji=emoji_for_icon_key(user.profile_icon_key),
         created_at=user.created_at.isoformat() + "Z",
         comment_count=comment_count,
     )
@@ -1013,11 +1118,13 @@ async def upload_avatar(
 # ---- Static / SPA serving ----
 
 if _DATASET_ROOT.is_dir():
-    app.mount(
-        "/media/dataset",
-        StaticFiles(directory=str(_DATASET_ROOT)),
-        name="dataset_media",
-    )
+
+    @app.get("/media/dataset/{full_path:path}")
+    async def _serve_dataset_media(full_path: str) -> FileResponse:
+        path = _resolve_dataset_media_file(unquote(full_path))
+        if path is None:
+            raise HTTPException(404)
+        return FileResponse(path)
 
 if FRONTEND_ROOT.is_dir():
 

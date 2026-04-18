@@ -18,7 +18,7 @@ export function showMpReconnectMenuOverlay(pending, handlers) {
   if (document.getElementById(OVERLAY_ID)) return;
 
   const untilMs = Math.ceil(Number(pending.reconnect_until_ts) * 1000);
-  const totalSec = 120;
+  const totalSec = Math.max(1, Number(pending.grace_total_s) || 60);
 
   const el = document.createElement("div");
   el.id = OVERLAY_ID;

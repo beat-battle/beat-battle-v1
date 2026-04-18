@@ -71,6 +71,33 @@ class MeResponse(BaseModel):
     coins: int = 0
     rank: RankInfo | None = None
     rank_index: int = 0
+    profile_icon_key: str | None = None
+    owned_profile_icon_keys: list[str] = []
+
+
+class ShopCatalogItem(BaseModel):
+    icon_key: str
+    emoji: str
+    price: int
+
+
+class ShopPurchaseRequest(BaseModel):
+    icon_key: str = Field(..., min_length=1, max_length=32)
+
+    @field_validator("icon_key")
+    @classmethod
+    def strip_key(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("icon_key required.")
+        return s
+
+
+class ShopPurchaseResponse(BaseModel):
+    ok: bool = True
+    coins: int
+    profile_icon_key: str | None
+    owned_profile_icon_keys: list[str]
 
 
 MAX_BEAT_UPLOAD_BYTES = 30 * 1024 * 1024
@@ -154,6 +181,8 @@ class ProfileResponse(BaseModel):
     rank_index: int = 0
     bio: str | None = None
     avatar_url: str | None = None
+    profile_icon_key: str | None = None
+    profile_icon_emoji: str | None = None
     created_at: str
     comment_count: int = 0
 

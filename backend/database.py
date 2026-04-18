@@ -93,6 +93,7 @@ def init_db() -> None:
     _add_column_if_missing("users", "coins", "INTEGER NOT NULL DEFAULT 0")
     _add_column_if_missing("users", "bio", "VARCHAR(200)")
     _add_column_if_missing("users", "avatar_url", "VARCHAR(512)")
+    _add_column_if_missing("users", "profile_icon_key", "VARCHAR(32)")
     _add_column_if_missing("users", "created_at", "TIMESTAMP DEFAULT NOW()")
 
     db = SessionLocal()

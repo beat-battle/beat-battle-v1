@@ -1,15 +1,15 @@
 {
   "seed": 4242,
   "spice": 0.5,
-  "key_order": ["snare", "clap", "synth1"],
+  "key_order": ["snares", "claps", "synth1"],
   "lists": {
-    "snare": ["trap/snares/a.ogg", "trap/snares/b.ogg", "trap/snares/c.ogg"],
-    "clap": ["trap/claps/x.ogg"],
+    "snares": ["trap/snares/a.ogg", "trap/snares/b.ogg", "trap/snares/c.ogg"],
+    "claps": ["trap/claps/x.ogg"],
     "synth1": ["trap/synths/s0.ogg", "trap/synths/s1.ogg"]
   },
   "expected_pick": {
-    "snare": "trap/snares/b.ogg",
-    "clap": "trap/claps/x.ogg",
+    "snares": "trap/snares/b.ogg",
+    "claps": "trap/claps/x.ogg",
     "synth1": "trap/synths/s0.ogg"
   }
 }

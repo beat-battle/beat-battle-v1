@@ -12,18 +12,18 @@ from .generator import generate_kit_light
 
 # Order returned to the web UI (matches generator / solo flow).
 API_SOUND_KEYS: tuple[str, ...] = (
-    "snare",
-    "clap",
-    "hihat",
-    "open_hat",
-    "808",
-    "perc",
+    "snares",
+    "claps",
+    "hihats",
+    "openhats",
+    "808s",
+    "percs",
     "fx",
-    "vox",
+    "Vox",
     "synth1",
     "synth2",
     "synth3",
-    "kick",
+    "kicks",
 )
 
 

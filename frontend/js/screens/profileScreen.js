@@ -11,13 +11,12 @@ import {
   postProfileComment,
   deleteProfileComment,
   updateBio,
-  uploadAvatar,
 } from "../profileApi.js";
 import { setAppErrorContext } from "../errorToast.js";
 import { escapeHtml, rankBadgeHtml } from "../rankUi.js";
 import { supporterDisplayNameInnerHtml } from "../supporters.js";
 import { mountAuthCornerMenu, mountAuthCornerGuest } from "../authCorner.js";
-import { playSfxMinor, playSfxMajor } from "../sfx.js";
+import { playSfxMinor } from "../sfx.js";
 import { mountModeSelectScreen } from "./modeSelect.js";
 
 function _relativeTime(iso) {
@@ -177,11 +176,8 @@ export function mountProfileScreen(root, ctx) {
       ? `<img class="profile-avatar-img" src="${escapeHtml(p.avatar_url)}" alt="${escapeHtml(p.username)}" />`
       : `<span class="profile-avatar-letter">${avatarChar}</span>`;
 
-    const avatarOverlay = isOwn
-      ? `<label class="profile-avatar-upload" title="Change avatar">
-           <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" id="profile-avatar-file" hidden />
-           <span class="profile-avatar-edit-icon">✎</span>
-         </label>`
+    const profileIconBadge = p.profile_icon_emoji
+      ? `<span class="profile-card-icon-badge" title="Profile icon" aria-hidden="true">${escapeHtml(p.profile_icon_emoji)}</span>`
       : "";
 
     const bioLen = (p.bio || "").length;
@@ -206,7 +202,7 @@ export function mountProfileScreen(root, ctx) {
       <div class="profile-card-top">
         <div class="profile-avatar-wrap">
           <div class="profile-avatar">${avatarInner}</div>
-          ${avatarOverlay}
+          ${profileIconBadge}
         </div>
         <div class="profile-card-info">
           <div class="profile-name name-with-rank">${nameHtml}</div>
@@ -254,25 +250,6 @@ export function mountProfileScreen(root, ctx) {
             setTimeout(() => (bioSave.textContent = "Save"), 2000);
           } finally {
             bioSave.disabled = false;
-          }
-        });
-      }
-
-      // Avatar upload handler
-      const avatarFile = cardEl.querySelector("#profile-avatar-file");
-      if (avatarFile) {
-        avatarFile.addEventListener("change", async () => {
-          const file = avatarFile.files?.[0];
-          if (!file) return;
-          try {
-            const result = await uploadAvatar(file);
-            if (result.avatar_url) {
-              profileData.avatar_url = result.avatar_url;
-              renderCard();
-              playSfxMajor();
-            }
-          } catch (e) {
-            alert(e.message || "Avatar upload failed.");
           }
         });
       }
@@ -383,6 +360,14 @@ export function mountProfileScreen(root, ctx) {
 
   return () => {
     window.removeEventListener("popstate", onPopState);
+    const pathMatch = window.location.pathname.match(/^\/@([^/]+)/);
+    if (
+      pathMatch &&
+      decodeURIComponent(pathMatch[1]).toLowerCase() ===
+        targetUsername.toLowerCase()
+    ) {
+      history.replaceState(null, "", "/");
+    }
     root.innerHTML = "";
   };
 }

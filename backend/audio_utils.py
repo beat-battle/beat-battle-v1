@@ -28,6 +28,23 @@ from scipy import signal
 SAMPLE_RATE = 44100
 
 
+def kit_slot_processing_category(slot: str) -> str:
+    """
+    Map dataset / manifest slot names (``snares``, ``808s``, ``openhats``, …) to the
+    internal labels used by EQ, tails, and quality checks (``snare``, ``808``, …).
+    """
+    s = str(slot or "").strip().lower()
+    return {
+        "snares": "snare",
+        "claps": "clap",
+        "hihats": "hihat",
+        "openhats": "open_hat",
+        "808s": "808",
+        "percs": "perc",
+        "kicks": "kick",
+    }.get(s, s)
+
+
 def list_dataset_samples_in_dir(d: Path) -> list[Path]:
     """
     List ``.ogg`` samples in ``d`` (dataset media for the browser / CDN).
@@ -260,7 +277,7 @@ def apply_filter(
     """
     s = float(np.clip(spice, 0.0, 1.0))
     x = _to_mono(audio).astype(np.float64, copy=True)
-    cat = category.lower()
+    cat = kit_slot_processing_category(category)
 
     if cat == "808":
         # Keep sub weight; roll off highs more when spice is low (tighter 808).
@@ -417,8 +434,9 @@ def apply_reverb_tail_if_needed(
 ) -> np.ndarray:
     """Small tail for snare, clap, open hat—probability increases with spice."""
     s = float(np.clip(spice, 0.0, 1.0))
+    cat = kit_slot_processing_category(category)
     p = {"snare": 0.2, "clap": 0.25, "open_hat": 0.45, "fx": 0.32, "vox": 0.3}.get(
-        category.lower(), 0.0
+        cat, 0.0
     )
     if p <= 0 or rng.random() > p + 0.35 * s:
         return _to_mono(audio).astype(np.float64, copy=True)
@@ -453,7 +471,7 @@ def fit_to_target_length(
     """
     target = max(1, int(target_samples))
     x = np.asarray(y, dtype=np.float64, copy=True)
-    cat = category.lower()
+    cat = kit_slot_processing_category(category)
 
     def _fit_channel(ch: np.ndarray) -> np.ndarray:
         z = ch.reshape(-1).astype(np.float64, copy=True)
@@ -633,7 +651,7 @@ def _low_band_rms(mono: np.ndarray, sr: int) -> float:
 
 
 def _category_flatness_threshold(category: str) -> float:
-    c = category.lower()
+    c = kit_slot_processing_category(category)
     if c == "hihat":
         return 0.86
     if c == "open_hat":
@@ -680,7 +698,7 @@ def quality_check(audio: np.ndarray, category: str, sr: int = SAMPLE_RATE) -> bo
     if clipping_ratio(x, 0.99) > 0.08:
         return False
 
-    cat = category.lower()
+    cat = kit_slot_processing_category(category)
 
     if cat in ("hihat", "open_hat"):
         min_dur = 0.015 if cat == "hihat" else 0.07

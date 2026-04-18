@@ -1,11 +1,16 @@
 /**
  * Heart in the corner opens this — full-screen credits.
  */
+import { playSfxMinor } from "./sfx.js";
 
 const OVERLAY_ID = "credits-overlay";
 
 /**
- * @typedef {{ name: string, contribution: string }} CreditEntry
+ * @typedef {{
+ *   name: string,
+ *   contribution: string,
+ *   profileUsername?: string,
+ * }} CreditEntry
  */
 
 /** This is for the mf on the credits <3 */
@@ -14,34 +19,47 @@ const CREDITS = [
   {
     name: "psyalysis",
     contribution: "Original creator of the game!",
+    profileUsername: "psyalysis"
   },
   {
     name: "dracocaine",
     contribution: "Network and Connections | Community Strategist | Visionary",
+    profileUsername: "dracocaine"
   },
   {
     name: "lukasz",
-    contribution: "Discord Admin",
+    contribution: "Discord Admin"
   },
   {
     name: "inboredom",
     contribution: "UI Sound Design | Trimming Samples",
+    profileUsername: "inboredom"
   },
   {
     name: "sarcasmo",
-    contribution: "Menu Pixel Icons",
+    contribution: "Menu Pixel Icons"
   },
   {
     name: "danny / danro (discord)",
     contribution: "Pixel Art Rank Icons",
+    profileUsername: "danro"
   },
   {
     name: "sebben",
     contribution: "Tuning Samples",
+    profileUsername: "sebben"
+  },
+  {
+    name: "prod.jawn",
+    contribution: "Beat Buck Icon",
+    profileUsername: "prodjawn"
   },
 ];
 
-export function openCreditsOverlay() {
+/**
+ * @param {(mountFn: (root: HTMLElement, ctx: object) => () => void, extra?: object) => void} [navigate]
+ */
+export function openCreditsOverlay(navigate) {
   if (document.getElementById(OVERLAY_ID)) return;
 
   const el = document.createElement("div");
@@ -84,9 +102,30 @@ export function openCreditsOverlay() {
     const li = document.createElement("li");
     li.className = "credits-entry";
 
-    const nameEl = document.createElement("p");
-    nameEl.className = "credits-entry-name";
-    nameEl.textContent = c.name;
+    const slug = (c.profileUsername || "").trim();
+    /** @type {HTMLElement} */
+    let nameEl;
+    if (slug && typeof navigate === "function") {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "credits-entry-name credits-entry-name--link";
+      btn.textContent = c.name;
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        playSfxMinor();
+        close();
+        history.pushState({ profile: slug }, "", `/@${encodeURIComponent(slug)}`);
+        import("./screens/profileScreen.js").then((m) =>
+          navigate(m.mountProfileScreen, { profileUsername: slug }),
+        );
+      });
+      nameEl = btn;
+    } else {
+      const p = document.createElement("p");
+      p.className = "credits-entry-name";
+      p.textContent = c.name;
+      nameEl = p;
+    }
 
     const roleEl = document.createElement("p");
     roleEl.className = "credits-entry-role";
@@ -109,6 +148,10 @@ export function openCreditsOverlay() {
   requestAnimationFrame(() => el.classList.add("credits-overlay--visible"));
 }
 
-export function initCreditsCornerControl(/** @type {HTMLElement} */ btn) {
-  btn.addEventListener("click", () => openCreditsOverlay());
+/**
+ * @param {HTMLElement} btn
+ * @param {{ navigate?: (mountFn: (root: HTMLElement, ctx: object) => () => void, extra?: object) => void }} [ctx]
+ */
+export function initCreditsCornerControl(btn, ctx = {}) {
+  btn.addEventListener("click", () => openCreditsOverlay(ctx.navigate));
 }

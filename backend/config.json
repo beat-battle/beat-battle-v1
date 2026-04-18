@@ -4,32 +4,32 @@
     "normalize_peak": 0.93,
     "fade_out_amt": 0.4
   },
-  "snare": {
+  "snares": {
     "normalize_peak_multiplier": 1.03,
     "duration_multiplier": 0.75,
     "fade_out_amt_multiplier": 0.4
   },
-  "clap": {
+  "claps": {
     "normalize_peak_multiplier": 0.95,
     "duration_multiplier": 0.6,
     "fade_out_amt_multiplier": 0.7
   },
-  "hihat": {
+  "hihats": {
     "normalize_peak_multiplier": 0.82,
     "duration_multiplier": 0.5,
     "fade_out_amt_multiplier": 1
   },
-  "open_hat": {
+  "openhats": {
     "normalize_peak_multiplier": 0.88,
     "duration_multiplier": 1.1,
     "fade_out_amt_multiplier": 0.2
   },
-  "808": {
+  "808s": {
     "normalize_peak_multiplier": 1.04,
     "duration_multiplier": 1.5,
     "fade_out_amt_multiplier": 0.9
   },
-  "perc": {
+  "percs": {
     "normalize_peak_multiplier": 0.9,
     "duration_multiplier": 0.8,
     "fade_out_amt_multiplier": 0.4
@@ -39,7 +39,7 @@
     "duration_multiplier": 1.6,
     "fade_out_amt_multiplier": 0.15
   },
-  "vox": {
+  "Vox": {
     "normalize_peak_multiplier": 0.86,
     "duration_multiplier": 1.5,
     "fade_out_amt_multiplier": 0.4
@@ -59,7 +59,7 @@
     "duration_multiplier": 0.22,
     "fade_out_amt_multiplier": 0.55
   },
-  "kick": {
+  "kicks": {
     "normalize_peak_multiplier": 1.0,
     "duration_multiplier": 0.45,
     "fade_out_amt_multiplier": 0.85

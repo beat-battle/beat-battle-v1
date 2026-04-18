@@ -26,13 +26,15 @@ import {
 import { playSfxMinor } from "../sfx.js";
 import {
   fetchKitManifest,
+  KIT_SOUND_KEYS,
   KIT_SOUND_FILE_EXT,
   loadDrumKitBase64Parallel,
   loadSynthBuffersAndMp3Base64Parallel,
+  normalizeKitGenre,
   SYNTH_KEYS,
 } from "../kitFromSeed.js";
 import { runSynthReveal } from "../synthReveal.js";
-import { mountKitLayoutShell } from "../kitGridLayout.js";
+import { kitSlotDisplayLabel, mountKitLayoutShell } from "../kitGridLayout.js";
 import {
   applyMatchWsToLobby,
   lobbyLikeFromMatchSync,
@@ -51,20 +53,7 @@ import { mountUploadScreen } from "./upload.js";
 import { mountVotingSlideshowScreen } from "./votingSlideshow.js";
 import { mountResultsScreen } from "./results.js";
 
-const SOUND_KEYS = [
-  "snare",
-  "clap",
-  "hihat",
-  "open_hat",
-  "808",
-  "perc",
-  "fx",
-  "vox",
-  "synth1",
-  "synth2",
-  "synth3",
-  "kick",
-];
+const SOUND_KEYS = KIT_SOUND_KEYS;
 
 function base64ToAudioSrc(b64) {
   return "data:audio/ogg;base64," + b64;
@@ -128,9 +117,13 @@ function getWaveSurfer() {
   throw new Error("WaveSurfer not loaded");
 }
 
-function kitNeedsFetch(sounds) {
+function kitNeedsFetch(sounds, genre = "trap") {
   if (!sounds || typeof sounds !== "object") return true;
-  return !SOUND_KEYS.every((k) => Boolean(sounds[k]));
+  const g = normalizeKitGenre(genre);
+  return !SOUND_KEYS.every((k) => {
+    if (g === "edm" && k === "808s") return true;
+    return Boolean(sounds[k]);
+  });
 }
 
 /**
@@ -170,6 +163,10 @@ async function fetchLobbyKitMeta(ctx) {
       vc != null && Number.isFinite(Number(vc)) ? Number(vc) : undefined,
     results:
       data.results && typeof data.results === "object" ? data.results : null,
+    genre:
+      data.genre != null && String(data.genre).trim() !== ""
+        ? String(data.genre)
+        : "trap",
   };
 }
 
@@ -224,6 +221,8 @@ async function buildKitClientSide(root, ctx, start, opts) {
   if (tryNavigatePastCookPhase(ctx, ctx.mpWs, meta)) return;
 
   const { seed, spice } = meta;
+  const kitGenre = normalizeKitGenre(meta.genre ?? ctx.kitGenre);
+  ctx.kitGenre = kitGenre;
   const apiBase = getApiBase();
   const ac = new AudioContext({ sampleRate: 44100 });
   let drumsPending = true;
@@ -274,7 +273,7 @@ async function buildKitClientSide(root, ctx, start, opts) {
   );
 
   try {
-    const manifest = await fetchKitManifest(apiBase);
+    const manifest = await fetchKitManifest(apiBase, kitGenre);
     if (opts.getCancelled()) {
       stopPhasePoll();
       return;
@@ -284,6 +283,7 @@ async function buildKitClientSide(root, ctx, start, opts) {
       spice,
       apiBase,
       manifest,
+      genre: kitGenre,
       onProgress: ({ step, total }) => {
         if (loadEl) loadEl.textContent = `Loading kit ${step} / ${total}…`;
       },
@@ -298,6 +298,7 @@ async function buildKitClientSide(root, ctx, start, opts) {
         apiBase,
         audioContext: ac,
         manifest,
+        genre: kitGenre,
       });
 
     if (opts.getCancelled()) {
@@ -489,7 +490,7 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
     head.className = "card-head";
     const title = document.createElement("h2");
     title.className = "card-title";
-    title.textContent = key.replace(/_/g, " ");
+    title.textContent = kitSlotDisplayLabel(key, ctx.kitGenre);
     const dl = document.createElement("button");
     dl.type = "button";
     dl.className = "card-download";
@@ -513,6 +514,7 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
     mountKitLayoutShell(grid, {
       synthKeys: SYNTH_KEYS,
       appendCard: appendCookCard,
+      genre: normalizeKitGenre(ctx.kitGenre),
     });
 
   clickFullPlayback.clear();
@@ -727,6 +729,7 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
 
 export function mountCookScreen(root, ctx) {
   setAppErrorContext({ screen: "Cook", phase: "Cook phase — kit and timer" });
+  ctx.kitGenre = normalizeKitGenre(ctx.kitGenre);
   const ws = ctx.mpWs;
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     import("./multiplayerHub.js").then((m) =>
@@ -834,7 +837,7 @@ export function mountCookScreen(root, ctx) {
     });
   };
 
-  if (kitNeedsFetch(ctx.sounds)) {
+  if (kitNeedsFetch(ctx.sounds, ctx.kitGenre)) {
     mountAuthCornerLeave(ctx);
     void (async () => {
       try {
@@ -886,6 +889,7 @@ export function mountCookScreen(root, ctx) {
       if (meta.cookRemainingS != null && Number.isFinite(meta.cookRemainingS)) {
         pending.lastCookRemainingS = meta.cookRemainingS;
       }
+      ctx.kitGenre = normalizeKitGenre(meta.genre ?? ctx.kitGenre);
       start(ctx.sounds);
     } catch (e) {
       if (!cancelled) {

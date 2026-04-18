@@ -33,6 +33,7 @@ from .lobby import (
     LobbyState,
     Player,
     beat_display_name,
+    normalize_lobby_genre,
 )
 from .manager_helpers import (
     BEAT_REACTION_KEYS,
@@ -53,7 +54,7 @@ from .manager_results import results_ws_payload_and_winner_user_ids
 from .mp_chat_text import chat_cooldown_elapsed, normalize_and_validate_mp_chat_text
 
 # How long we keep your seat after the tab drops (soft disconnect). Tests crank this way down.
-MP_WS_GRACE_S = 120.0
+MP_WS_GRACE_S = 60.0
 
 
 class LobbyManager:
@@ -163,6 +164,7 @@ class LobbyManager:
         out: dict[str, Any] = {
             "seed": lobby.seed,
             "spice": lobby.spice,
+            "genre": lobby.genre,
             "match_state": lobby.state.value,
         }
         if lobby.state == LobbyState.COOKING and lobby.cook_deadline_ts is not None:
@@ -251,6 +253,7 @@ class LobbyManager:
             "host_id",
             "state",
             "spice",
+            "genre",
             "cook_duration_min",
             "anonymous_voting",
             "is_public",
@@ -315,6 +318,7 @@ class LobbyManager:
                 "player_id": pid,
                 "reconnect_until_ts": until,
                 "seconds_remaining": int(math.ceil(remaining)),
+                "grace_total_s": int(MP_WS_GRACE_S),
             }
         return None
 
@@ -525,7 +529,12 @@ class LobbyManager:
         return secrets.token_hex(4).upper()
 
     async def create_lobby(
-        self, player_id: str, name: str, spices: list[float], is_public: bool
+        self,
+        player_id: str,
+        name: str,
+        spices: list[float],
+        is_public: bool,
+        genre: str | None = None,
     ) -> None:
         if not spices:
             await self.send_player_error(
@@ -540,6 +549,7 @@ class LobbyManager:
         user_id, display_name = sess
         wins = await asyncio.to_thread(fetch_user_wins_sync, user_id)
         host_spice = sorted(spices)[0]
+        g = normalize_lobby_genre(genre)
         async with self._meta_lock:
             if player_id in self.player_lobby:
                 await self.send_player_error(player_id, "Already in a lobby.")
@@ -547,6 +557,7 @@ class LobbyManager:
             lobby = Lobby(
                 id=self._new_lobby_id(),
                 spice=host_spice,
+                genre=g,
                 is_public=is_public,
             )
             self.lobbies[lobby.id] = lobby
@@ -685,6 +696,7 @@ class LobbyManager:
                     {
                         "lobby_id": lid,
                         "spice": L.spice,
+                        "genre": L.genre,
                         "player_count": len(L.players),
                         "max_players": MAX_LOBBY_PLAYERS,
                         "slots_remaining": slots,
@@ -854,6 +866,7 @@ class LobbyManager:
         await self._try_start_game(lobby_id)
 
     async def _try_start_game(self, lobby_id: str) -> None:
+        genre = ""
         async with self._with_lobby_lock(lobby_id):
             lobby = self.lobbies.get(lobby_id)
             if not lobby or lobby.state != LobbyState.LOBBY:
@@ -867,6 +880,7 @@ class LobbyManager:
             lobby.sounds = None
             lobby.state = LobbyState.COOKING
             spice = lobby.spice
+            genre = lobby.genre
             lobby.cook_finished.clear()
             lobby.uploaded.clear()
             lobby.votes.clear()
@@ -883,6 +897,7 @@ class LobbyManager:
                 "lobby_id": lobby_id,
                 "seed": seed,
                 "spice": spice,
+                "genre": genre,
                 "cook_duration_min": cook_min,
             },
         )
@@ -1177,6 +1192,7 @@ class LobbyManager:
             new_lobby = Lobby(
                 id=new_id,
                 spice=old.spice,
+                genre=old.genre,
                 is_public=old.is_public,
                 cook_duration_min=old.cook_duration_min,
                 anonymous_voting=old.anonymous_voting,
@@ -1552,7 +1568,11 @@ class LobbyManager:
                 return False
             is_public = coerce_bool(data.get("is_public"), default=True)
             await self.create_lobby(
-                player_id, str(data.get("name", "")), spices, is_public
+                player_id,
+                str(data.get("name", "")),
+                spices,
+                is_public,
+                data.get("genre"),
             )
         elif t == "join_lobby":
             name = str(data.get("name", ""))

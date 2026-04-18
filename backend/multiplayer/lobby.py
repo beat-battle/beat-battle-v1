@@ -11,6 +11,18 @@ from typing import Any
 
 from ..rank import rank_public_dict
 
+# Host-picked kit pack for multiplayer (client manifest + CDN paths).
+ALLOWED_LOBBY_GENRES: frozenset[str] = frozenset({"trap", "edm"})
+DEFAULT_LOBBY_GENRE = "trap"
+
+
+def normalize_lobby_genre(raw: Any) -> str:
+    """Map client JSON to ``trap`` or ``edm``; unknown values → ``trap``."""
+    s = str(raw or "").strip().lower()
+    if s in ALLOWED_LOBBY_GENRES:
+        return s
+    return DEFAULT_LOBBY_GENRE
+
 # Match spec: three spice cards map to these generation intensities.
 SPICE_MILD = 0.25
 SPICE_MEDIUM = 0.5
@@ -70,6 +82,7 @@ class Player:
 class Lobby:
     id: str
     spice: float
+    genre: str = DEFAULT_LOBBY_GENRE
     is_public: bool = True
     players: dict[str, Player] = field(default_factory=dict)
     state: LobbyState = LobbyState.LOBBY
@@ -107,6 +120,7 @@ class Lobby:
         return {
             "lobby_id": self.id,
             "spice": self.spice,
+            "genre": self.genre,
             "is_public": self.is_public,
             "state": self.state.value,
             "host_id": host_id,

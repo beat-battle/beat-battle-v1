@@ -24,7 +24,6 @@ function boot() {
   const cornerMenu = document.querySelector(".corner-social-menu");
   if (cornerMenu instanceof HTMLElement) initCornerSocialMenu(cornerMenu);
   const creditsBtn = document.getElementById("credits-corner-btn");
-  if (creditsBtn instanceof HTMLElement) initCreditsCornerControl(creditsBtn);
   window.addEventListener("error", (ev) => {
     const fn = ev.filename || "";
     if (!fn || fn.includes("extension://") || fn.includes("moz-extension://"))
@@ -70,6 +69,9 @@ function boot() {
       setAppErrorContext({ lobbyId: String(ctx.lobbyId) });
     unmount = mountFn(root, ctx);
   };
+
+  if (creditsBtn instanceof HTMLElement)
+    initCreditsCornerControl(creditsBtn, { navigate });
 
   // Check for /@username profile URL
   const profileMatch = window.location.pathname.match(/^\/@([^/]+)/);

@@ -25,7 +25,8 @@ const DEFAULT_CDN_FOR_HOSTNAMES = new Set([
 const DEFAULT_CDN_BASE = "https://assets.beat-battle.net";
 
 /**
- * Public asset host (R2 custom domain). Empty → dataset + SFX load from API origin paths.
+ * Public asset host (R2 custom domain). Empty → kit audio uses ``/media/dataset/`` on the API
+ * (only if you have no CDN meta and are not on localhost / :8000).
  * Override: sessionStorage.setItem("beatBattleCdnBase", "https://assets.example.com"); reload.
  */
 export function getCdnBase() {
@@ -40,6 +41,10 @@ export function getCdnBase() {
   try {
     const h = window.location?.hostname || "";
     if (DEFAULT_CDN_FOR_HOSTNAMES.has(h)) return DEFAULT_CDN_BASE;
+    // Local dev: kit OGGs live on CDN/R2, not under repo ``dataset/`` (matches :8000 API default).
+    const local = new Set(["localhost", "127.0.0.1", "[::1]"]);
+    if (local.has(h)) return DEFAULT_CDN_BASE;
+    if (window.location?.port === "8000") return DEFAULT_CDN_BASE;
   } catch {
     /* ignore */
   }

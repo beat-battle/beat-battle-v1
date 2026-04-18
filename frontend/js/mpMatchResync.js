@@ -53,6 +53,7 @@ export async function applyMatchResyncFromPayload(ctx, m, screenId) {
     const lobbyLike = {
       lobby_id: lid,
       spice: m.spice,
+      genre: m.genre != null ? String(m.genre) : "trap",
       is_public: m.is_public !== false,
       state: m.state ?? st,
       host_id: m.host_id ?? "",
@@ -83,14 +84,24 @@ export async function applyMatchResyncFromPayload(ctx, m, screenId) {
     const drum = m.drumkit && typeof m.drumkit === "object" ? m.drumkit : {};
     let seed = Number(drum.seed);
     let spice = Number(m.spice);
+    /** @type {Record<string, unknown> | null} */
+    let kit = null;
     if ((!Number.isFinite(seed) || !Number.isFinite(spice)) && ctx.apiBase) {
-      const kit = await fetchKitMetaForResume(ctx.apiBase, lid);
+      kit = await fetchKitMetaForResume(ctx.apiBase, lid);
       if (kit) {
         if (!Number.isFinite(seed)) seed = Number(kit.seed);
         if (!Number.isFinite(spice)) spice = Number(kit.spice);
       }
     }
     if (!Number.isFinite(seed) || !Number.isFinite(spice)) return false;
+    const kitGenreRaw =
+      m.genre != null
+        ? String(m.genre)
+        : kit && kit.genre != null
+          ? String(kit.genre)
+          : ctx.kitGenre != null
+            ? String(ctx.kitGenre)
+            : "trap";
     const { mountCookScreen } = await import("./screens/cook.js");
     ctx.navigate(mountCookScreen, {
       mpWs: ws,
@@ -101,6 +112,7 @@ export async function applyMatchResyncFromPayload(ctx, m, screenId) {
       sounds: ctx.sounds && typeof ctx.sounds === "object" ? ctx.sounds : {},
       cookDurationMin: Number(m.cook_duration_min) || 10,
       skipSynthReveal: true,
+      kitGenre: kitGenreRaw,
     });
     return true;
   }
@@ -173,6 +185,7 @@ export function mergeMatchResyncIntoLobby(m, lobby) {
     ...lobby,
     lobby_id: lid,
     spice: m.spice ?? lobby.spice,
+    genre: m.genre != null ? String(m.genre) : lobby.genre,
     is_public: m.is_public ?? lobby.is_public,
     state: m.state ?? st,
     host_id: m.host_id ?? lobby.host_id,

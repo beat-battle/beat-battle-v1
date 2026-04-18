@@ -83,13 +83,14 @@ export function mountServerBrowserScreen(root, ctx) {
       }
       const header = `
         <div class="server-row server-row-head">
-          <span>Code</span><span>Heat</span><span>Players</span><span></span>
+          <span>Code</span><span>Genre</span><span>Heat</span><span>Players</span><span></span>
         </div>`;
       const body = rows
         .map(
           (r) => `
         <div class="server-row" data-lid="${escapeHtml(r.lobby_id)}">
           <span class="server-code">${escapeHtml(r.lobby_id)}</span>
+          <span>${escapeHtml(String(r.genre || "trap"))}</span>
           <span>${escapeHtml(String(r.spice))}</span>
           <span>${r.player_count}/${r.max_players}</span>
           <button type="button" class="arcade-btn arcade-btn-primary server-join-btn">Join</button>

@@ -23,18 +23,18 @@ _MULTIPLIER_KEYS = frozenset(
 _DEFAULT_BASE_KEYS = frozenset({"duration_s", "normalize_peak", "fade_out_amt"})
 
 SOUND_KEYS = (
-    "snare",
-    "clap",
-    "hihat",
-    "open_hat",
-    "808",
-    "perc",
+    "snares",
+    "claps",
+    "hihats",
+    "openhats",
+    "808s",
+    "percs",
     "fx",
-    "vox",
+    "Vox",
     "synth1",
     "synth2",
     "synth3",
-    "kick",
+    "kicks",
 )
 
 

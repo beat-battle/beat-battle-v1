@@ -33,18 +33,25 @@ export function mountSpiceSelectScreen(root, ctx) {
         <span class="screen-topbar-spacer" aria-hidden="true"></span>
       </div>
       <div class="mp-hub-body">
-      <p class="arcade-hint spice-toggle-hint">Choose heat for this lobby</p>
       <fieldset class="visibility-field">
         <legend class="arcade-label">Lobby visibility</legend>
         <label class="vis-option"><input type="radio" name="lobby-vis" value="public" checked /> Public — listed in server browser</label>
         <label class="vis-option"><input type="radio" name="lobby-vis" value="private" /> Code only — friends join with the code</label>
       </fieldset>
-      <div class="spice-cards" id="spice-cards"></div>
+      <fieldset class="visibility-field">
+        <legend class="arcade-label">Spiciness</legend>
+        <div class="spice-cards" id="spice-cards"></div>
+      </fieldset>
       <button type="button" class="arcade-btn arcade-btn-primary" id="spice-confirm" disabled>Create lobby</button>
       </div>
     </div>
   `;
 
+  root.querySelectorAll('input[name="lobby-vis"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      playSfxOn();
+    });
+  });
   const cardsEl = root.querySelector("#spice-cards");
   /** @type {Set<number>} */
   const selected = new Set(SPICES.map((x) => x.value));
@@ -103,11 +110,14 @@ export function mountSpiceSelectScreen(root, ctx) {
     playSfxMajor();
     const vis = root.querySelector('input[name="lobby-vis"]:checked');
     const isPublic = vis?.getAttribute("value") !== "private";
+    // Release: lobby creation is trap-only (restore genre fieldset above when enabling EDM).
+    const mpGenre = "trap";
     ctx.navigate(mountMatchmakingScreen, {
       mpName: displayName,
       username: displayName,
       lobbyFlow: "create",
       isPublic,
+      mpGenre,
       mpSpices: Array.from(selected).sort((a, b) => a - b),
     });
   });

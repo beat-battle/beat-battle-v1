@@ -4,9 +4,13 @@
 import { clearAuthSession, fetchMe } from "./authApi.js";
 import { rankBadgeHtml } from "./rankUi.js";
 import { supporterDisplayNameInnerHtml } from "./supporters.js";
-import { playSfxMajor, playSfxMinor } from "./sfx.js";
+import { playSfxMajor, playSfxMinor, playSfxOff, playSfxOn } from "./sfx.js";
 
 const AUTH_MENU_OPEN = "auth-corner-menu--open";
+const BEATBUCKS_ICON_SRC = new URL(
+  "../imgs/icons/beatbucks.png",
+  import.meta.url,
+).href;
 
 /**
  * @param {HTMLElement} root — `.auth-corner-menu` wrapper
@@ -18,6 +22,7 @@ function initAuthCornerAccountMenu(root) {
     return;
 
   const setOpen = (open) => {
+    if (root.classList.contains(AUTH_MENU_OPEN) === open) return;
     root.classList.toggle(AUTH_MENU_OPEN, open);
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
     panel.setAttribute("aria-hidden", open ? "false" : "true");
@@ -27,6 +32,8 @@ function initAuthCornerAccountMenu(root) {
     );
     if (open) panel.removeAttribute("inert");
     else panel.setAttribute("inert", "");
+    if (open) playSfxOn();
+    else playSfxOff();
   };
 
   toggle.addEventListener("click", (ev) => {
@@ -119,8 +126,20 @@ export function mountAuthCornerMenu(ctx, opts = {}) {
       if (nameEl) {
         nameEl.innerHTML = `${rankBadgeHtml(me.rank)}${supporterDisplayNameInnerHtml(me.username)}`;
       }
-      if (winsEl)
-        winsEl.textContent = `${me.wins} ${me.wins === 1 ? "win" : "wins"} · 🪙 ${me.coins ?? 0}`;
+      if (winsEl) {
+        winsEl.replaceChildren();
+        winsEl.append(
+          document.createTextNode(
+            `${me.wins} ${me.wins === 1 ? "win" : "wins"} · ${me.coins ?? 0}`,
+          ),
+        );
+        const icon = document.createElement("img");
+        icon.src = BEATBUCKS_ICON_SRC;
+        icon.alt = "";
+        icon.className = "beatbucks-inline-icon";
+        icon.setAttribute("aria-hidden", "true");
+        winsEl.append(icon);
+      }
     })
     .catch(() => {
       if (winsEl) winsEl.textContent = "";

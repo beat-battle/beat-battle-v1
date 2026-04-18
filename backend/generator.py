@@ -46,69 +46,100 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATASET_ROOT = _PROJECT_ROOT / "dataset"
 OUTPUT_DIR = _PROJECT_ROOT / "generated"
 
-# Dataset folder (per spec) → logical name used in processing
+# Browser/CDN drum library on R2; optional local mirror under ``dataset/`` for dev.
+_TRAP_REFINED_ROOT = DATASET_ROOT / "TrapRefined"
+_TRAP_REFINED_NESTED = DATASET_ROOT / "beat-battle-assets" / "TrapRefined"
+_TRAP_REFINED_LEGACY = DATASET_ROOT / "beat-battle-assets" / "DRACO" / "TrapRefined"
+TRAP_REFINED_DRUM_ROOT = (
+    _TRAP_REFINED_ROOT
+    if _TRAP_REFINED_ROOT.is_dir()
+    else _TRAP_REFINED_NESTED
+    if _TRAP_REFINED_NESTED.is_dir()
+    else _TRAP_REFINED_LEGACY
+    if _TRAP_REFINED_LEGACY.is_dir()
+    else _TRAP_REFINED_ROOT
+)
+
+# Kit slot key == on-disk / R2 folder name under ``trap/`` or TrapRefined.
 CATEGORY_FOLDERS: dict[str, str] = {
-    "snare": "snares",
-    "clap": "claps",
-    "hihat": "hihats",
-    "open_hat": "openhats",
-    "808": "808s",
-    "perc": "percs",
+    "snares": "snares",
+    "claps": "claps",
+    "hihats": "hihats",
+    "openhats": "openhats",
+    "808s": "808s",
+    "percs": "percs",
     "fx": "fx",
-    "vox": "Vox",
-    "kick": "kicks",
+    "Vox": "Vox",
+    "kicks": "kicks",
 }
 
 
 def _dataset_dir(logical: str) -> Path:
-    """Resolve ``dataset/trap/<category>/``. Open hats: ``openhats``; ``open_hihats`` fallback."""
+    """Drums: prefer TrapRefined tree, else ``dataset/trap/<category>/`` (``open_hihats`` fallback)."""
+    if logical.startswith("synth"):
+        refined_s = TRAP_REFINED_DRUM_ROOT / "synths"
+        trap_s = DATASET_ROOT / "trap" / "synths"
+        if refined_s.is_dir():
+            return refined_s
+        return trap_s
     name = CATEGORY_FOLDERS[logical]
     trap = DATASET_ROOT / "trap"
-    p = trap / name
-    if p.is_dir():
-        return p
-    if logical == "open_hat" and (trap / "open_hihats").is_dir():
-        return trap / "open_hihats"
-    return p
+    refined = TRAP_REFINED_DRUM_ROOT / name
+    p_trap = trap / name
+    if refined.is_dir():
+        return refined
+    if p_trap.is_dir():
+        return p_trap
+    if logical == "openhats":
+        refined_oh = TRAP_REFINED_DRUM_ROOT / "open_hihats"
+        if refined_oh.is_dir():
+            return refined_oh
+        trap_oh = trap / "open_hihats"
+        if trap_oh.is_dir():
+            return trap_oh
+    return p_trap
 
 
 def trap_synth_samples_dir() -> Path:
-    """Shared pool for synth1/2/3 — same folder as CDN ``trap/synths/*.ogg``."""
+    """Shared pool for synth1/2/3 — TrapRefined ``synths/`` if present, else ``trap/synths``."""
+    refined = TRAP_REFINED_DRUM_ROOT / "synths"
+    if refined.is_dir():
+        return refined
     return DATASET_ROOT / "trap" / "synths"
 
 
 EXPECTED_KIT_WAVS = frozenset(
     {
-        "snare.wav",
-        "clap.wav",
-        "hihat.wav",
-        "open_hat.wav",
-        "808.wav",
-        "perc.wav",
+        "snares.wav",
+        "claps.wav",
+        "hihats.wav",
+        "openhats.wav",
+        "808s.wav",
+        "percs.wav",
         "fx.wav",
-        "vox.wav",
+        "Vox.wav",
         "synth1.wav",
         "synth2.wav",
         "synth3.wav",
-        "kick.wav",
+        "kicks.wav",
     }
 )
 
 # Light kit: copies dataset OGGs (web / solo API).
 EXPECTED_KIT_OGG = frozenset(
     {
-        "snare.ogg",
-        "clap.ogg",
-        "hihat.ogg",
-        "open_hat.ogg",
-        "808.ogg",
-        "perc.ogg",
+        "snares.ogg",
+        "claps.ogg",
+        "hihats.ogg",
+        "openhats.ogg",
+        "808s.ogg",
+        "percs.ogg",
         "fx.ogg",
-        "vox.ogg",
+        "Vox.ogg",
         "synth1.ogg",
         "synth2.ogg",
         "synth3.ogg",
-        "kick.ogg",
+        "kicks.ogg",
     }
 )
 
@@ -277,21 +308,21 @@ def generate_slot(
     assert sr == SAMPLE_RATE
 
     # --- Step 2: optional layering (category rules) ---
-    if logical == "snare":
+    if logical == "snares":
         y = _maybe_layer_snare(y, rng, s)
-    elif logical == "clap":
+    elif logical == "claps":
         y = _maybe_layer_clap(y, rng, s)
-    elif logical == "hihat":
+    elif logical == "hihats":
         y = _maybe_layer_hihat(y, rng, s)
-    elif logical == "perc":
+    elif logical == "percs":
         y = _maybe_layer_perc(y, rng, s)
     elif logical == "fx":
         y = _maybe_layer_fx(y, rng, s)
-    elif logical == "vox":
+    elif logical == "Vox":
         y = _maybe_layer_vox(y, rng, s)
 
     # Perc: optional reverse (experimental; more likely when spice is high)
-    if logical == "perc" and rng.random() < 0.08 + 0.42 * s:
+    if logical == "percs" and rng.random() < 0.08 + 0.42 * s:
         y = y[::-1].copy()
 
     # FX: optional reverse before pitch (risers / reverses)
@@ -299,18 +330,18 @@ def generate_slot(
         y = y[::-1].copy()
 
     # Vox: rare reverse (chops / memes)
-    if logical == "vox" and rng.random() < 0.06 + 0.28 * s:
+    if logical == "Vox" and rng.random() < 0.06 + 0.28 * s:
         y = y[::-1].copy()
 
     # Synth: optional time stretch before pitch
     if logical == "synth":
         y = apply_time_stretch_optional(y, s, rng)
 
-    if logical in ("fx", "vox"):
+    if logical in ("fx", "Vox"):
         y = apply_time_stretch_optional(y, s, rng)
 
     # --- Step 3: pitch (808 / kick often cleaner with no shift—probability scales with spice) ---
-    if logical in ("808", "kick"):
+    if logical in ("808s", "kicks"):
         y = apply_pitch_shift(y, s, sr, rng, always=False)
     else:
         y = apply_pitch_shift(y, s, sr, rng, always=True)
@@ -319,32 +350,32 @@ def generate_slot(
     y = apply_filter(y, logical, s, sr, rng)
 
     # Snare / kick: transient emphasis after EQ so filters don't dull the click
-    if logical in ("snare", "kick"):
+    if logical in ("snares", "kicks"):
         y = transient_boost(y, s, rng)
 
     # --- Step 5: saturation (soft clip) ---
     y = apply_saturation(y, s)
 
-    if logical in ("perc", "synth", "fx", "vox"):
+    if logical in ("percs", "synth", "fx", "Vox"):
         y = apply_distortion_extra(y, s, rng)
 
     # --- Tails / imaging ---
-    if logical == "snare":
+    if logical == "snares":
         y = apply_reverb_tail_if_needed(y, SAMPLE_RATE, s, rng, logical)
-    elif logical == "clap":
+    elif logical == "claps":
         y = _process_common_tail(y, logical, s, rng, stereo_allowed=True)
-    elif logical == "hihat":
+    elif logical == "hihats":
         if rng.random() < 0.4 + 0.45 * s:
             y = stereo_widen(y, s, rng)
         else:
             y = y.astype(np.float64, copy=False)
-    elif logical == "open_hat":
+    elif logical == "openhats":
         y = apply_reverb_tail_if_needed(y, SAMPLE_RATE, s, rng, logical)
         if rng.random() < 0.55 + 0.25 * s:
             y = stereo_widen(y, s, rng)
         else:
             y = y.astype(np.float64, copy=False)
-    elif logical == "perc":
+    elif logical == "percs":
         if rng.random() < 0.3 + 0.45 * s:
             y = stereo_widen(y, s, rng)
         else:
@@ -355,13 +386,13 @@ def generate_slot(
             y = stereo_widen(y, s, rng)
         else:
             y = y.astype(np.float64, copy=False)
-    elif logical == "vox":
+    elif logical == "Vox":
         y = apply_reverb_tail_if_needed(y, SAMPLE_RATE, s, rng, logical)
         if rng.random() < 0.32 + 0.42 * s:
             y = stereo_widen(y, s, rng)
         else:
             y = y.astype(np.float64, copy=False)
-    elif logical in ("808", "kick"):
+    elif logical in ("808s", "kicks"):
         y = y.astype(np.float64, copy=False)
     elif logical == "synth":
         y = y.astype(np.float64, copy=False)
@@ -453,15 +484,15 @@ def generate_kit(
     offset = 0
 
     static_order = [
-        "snare",
-        "clap",
-        "hihat",
-        "open_hat",
-        "808",
-        "perc",
+        "snares",
+        "claps",
+        "hihats",
+        "openhats",
+        "808s",
+        "percs",
         "fx",
-        "vox",
-        "kick",
+        "Vox",
+        "kicks",
     ]
     for logical in static_order:
         p = resolve_sound(logical, cfg)
@@ -540,18 +571,18 @@ def generate_kit(
 
 # Order must match ``kit_payload.API_SOUND_KEYS`` (solo / multiplayer / UI).
 _LIGHT_KIT_KEYS: tuple[str, ...] = (
-    "snare",
-    "clap",
-    "hihat",
-    "open_hat",
-    "808",
-    "perc",
+    "snares",
+    "claps",
+    "hihats",
+    "openhats",
+    "808s",
+    "percs",
     "fx",
-    "vox",
+    "Vox",
     "synth1",
     "synth2",
     "synth3",
-    "kick",
+    "kicks",
 )
 
 

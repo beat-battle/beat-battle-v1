@@ -31,6 +31,7 @@ export function mountMatchmakingScreen(root, ctx) {
       ? ctx.mpSpices
       : [0.25, 0.5, 0.85];
   const isPublic = ctx.isPublic !== false;
+  const mpGenre = ctx.mpGenre === "edm" ? "edm" : "trap";
   const joinLobbyId = ctx.joinLobbyId ? String(ctx.joinLobbyId).trim() : "";
   const lobbyCode = ctx.lobbyCode
     ? String(ctx.lobbyCode)
@@ -154,6 +155,7 @@ export function mountMatchmakingScreen(root, ctx) {
               name,
               spices,
               is_public: isPublic,
+              genre: mpGenre,
             }),
           );
         } else if (flow === "join_id" && joinLobbyId) {

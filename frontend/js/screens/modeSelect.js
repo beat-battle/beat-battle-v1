@@ -15,7 +15,7 @@ import {
   showRankUpOverlay,
 } from "../rankUi.js";
 import { mountAuthCornerGuest, mountAuthCornerMenu } from "../authCorner.js";
-import { playSfxMajor, playSfxMinor } from "../sfx.js";
+import { playSfxMajor, playSfxMinor, playSfxOff, playSfxOn } from "../sfx.js";
 import { mountSoloScreen } from "../solo.js";
 
 const CHILI_SRC = new URL("../../imgs/chili.png", import.meta.url).href;
@@ -125,6 +125,7 @@ export function mountModeSelectScreen(root, ctx) {
           <div id="mode-select-step-home" class="mode-select-step">
             <button type="button" class="arcade-btn arcade-btn-primary" id="btn-play">Play</button>
             <button type="button" class="arcade-btn arcade-btn-primary" id="btn-leaderboard">Leaderboard</button>
+            <button type="button" class="arcade-btn arcade-btn-primary" id="btn-shop">Shop</button>
           </div>
           <div id="mode-select-step-modes" class="mode-select-step" hidden>
             <button type="button" class="arcade-btn arcade-btn-primary" id="btn-solo">Solo</button>
@@ -163,6 +164,7 @@ export function mountModeSelectScreen(root, ctx) {
   const backBtn = root.querySelector("#mode-select-back");
   const playBtn = root.querySelector("#btn-play");
   const leaderboardBtn = root.querySelector("#btn-leaderboard");
+  const shopBtn = root.querySelector("#btn-shop");
   const solo = root.querySelector("#btn-solo");
   const mp = root.querySelector("#btn-mp");
   const lockHint = root.querySelector("#mp-lock-hint");
@@ -256,12 +258,12 @@ export function mountModeSelectScreen(root, ctx) {
   };
 
   playBtn?.addEventListener("click", () => {
-    playSfxMinor();
+    playSfxOn();
     showModeChoice();
   });
 
   backBtn?.addEventListener("click", () => {
-    playSfxMinor();
+    playSfxOff();
     showHomeLanding();
   });
 
@@ -269,6 +271,13 @@ export function mountModeSelectScreen(root, ctx) {
     playSfxMajor();
     import("./leaderboardScreen.js").then((m) =>
       ctx.navigate(m.mountLeaderboardScreen),
+    );
+  });
+
+  shopBtn?.addEventListener("click", () => {
+    playSfxMinor();
+    import("./shopScreen.js").then((m) =>
+      ctx.navigate(m.mountShopScreen),
     );
   });
 

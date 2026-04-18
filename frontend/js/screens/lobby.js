@@ -19,7 +19,13 @@ import {
   mountMpChat,
   mpChatHandleErrorPayload,
 } from "../mpChat.js";
-import { playSfxBeatBattle, playSfxMajor, playSfxMinor } from "../sfx.js";
+import {
+  playSfxBeatBattle,
+  playSfxMajor,
+  playSfxMinor,
+  playSfxOff,
+  playSfxOn,
+} from "../sfx.js";
 import { mountCookScreen } from "./cook.js";
 
 /**
@@ -35,6 +41,8 @@ function renderLobby(root, lobby, selfId, kitProgress, settingsPanelOpen) {
   const isHost = Boolean(selfId && hostId && selfId === hostId);
   const cookMin = Number(lobby.cook_duration_min) || 10;
   const anonymousVoting = Boolean(lobby.anonymous_voting);
+  const genreLabel =
+    String(lobby.genre || "trap").toLowerCase() === "edm" ? "EDM" : "Trap";
   const generating = lobby.state === "generating" || kitProgress != null;
   const pct = generating ? Math.min(100, Number(kitProgress?.percent) || 0) : 0;
   const kitMsg = kitProgress?.message || "Preparing kit…";
@@ -121,7 +129,7 @@ function renderLobby(root, lobby, selfId, kitProgress, settingsPanelOpen) {
   root.innerHTML = `
     <div class="screen lobby arcade-panel">
       <h2 class="arcade-heading">LOBBY <span class="lobby-id">${escapeHtml(lobby.lobby_id || "")}</span></h2>
-      <p class="arcade-hint">Spice ${lobby.spice} · ${lobby.is_public ? "Public" : "Code only"} · min 2 players · all ready · cook ${cookMin} min${
+      <p class="arcade-hint">Spice ${lobby.spice} · ${genreLabel} · ${lobby.is_public ? "Public" : "Code only"} · min 2 players · all ready · cook ${cookMin} min${
         anonymousVoting ? " · anonymous voting" : ""
       }</p>
       ${hostSettings}
@@ -259,6 +267,12 @@ export function mountLobbyScreen(root, ctx) {
     if (m.type === "start_game") {
       playSfxBeatBattle();
       preserveWs = true;
+      const g =
+        m.genre != null
+          ? String(m.genre)
+          : lobby.genre != null
+            ? String(lobby.genre)
+            : "trap";
       ctx.navigate(mountCookScreen, {
         mpWs: ws,
         playerId,
@@ -267,6 +281,7 @@ export function mountLobbyScreen(root, ctx) {
         spice: m.spice,
         sounds: m.sounds,
         cookDurationMin: m.cook_duration_min ?? 10,
+        kitGenre: g,
       });
     }
   };
@@ -285,7 +300,7 @@ export function mountLobbyScreen(root, ctx) {
     const t = e.target;
     if (!(t instanceof HTMLSelectElement) || t.id !== "cook-duration-select")
       return;
-    playSfxMinor();
+    playSfxOn();
     if (ws.readyState !== WebSocket.OPEN) {
       const err = errEl();
       if (err) err.textContent = "Not connected.";
@@ -315,13 +330,14 @@ export function mountLobbyScreen(root, ctx) {
     if (anonBtn instanceof HTMLButtonElement) {
       e.preventDefault();
       e.stopPropagation();
-      playSfxMinor();
+      const next = !Boolean(lobby.anonymous_voting);
+      if (next) playSfxOn();
+      else playSfxOff();
       if (ws.readyState !== WebSocket.OPEN) {
         const err = errEl();
         if (err) err.textContent = "Not connected.";
         return;
       }
-      const next = !Boolean(lobby.anonymous_voting);
       try {
         ws.send(
           JSON.stringify({ type: "set_anonymous_voting", enabled: next }),
@@ -397,6 +413,8 @@ export function mountLobbyScreen(root, ctx) {
       return;
     if (!t.isConnected) return;
     lobbySettingsOpen = t.open;
+    if (t.open) playSfxOn();
+    else playSfxOff();
   };
 
   root.addEventListener("click", clickHandler);

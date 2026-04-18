@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -27,6 +27,9 @@ class User(Base):
     avatar_url: Mapped[str | None] = mapped_column(
         String(512), nullable=True, default=None
     )
+    profile_icon_key: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
@@ -44,6 +47,31 @@ class User(Base):
         foreign_keys="ProfileComment.author_id",
         back_populates="author",
     )
+    profile_icon_ownership: Mapped[list["UserProfileIconOwnership"]] = relationship(
+        "UserProfileIconOwnership",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+class UserProfileIconOwnership(Base):
+    """Purchased profile icons (beatbucks shop)."""
+
+    __tablename__ = "user_profile_icon_ownership"
+    __table_args__ = (
+        UniqueConstraint("user_id", "icon_key", name="uq_user_profile_icon"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    icon_key: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="profile_icon_ownership")
 
 
 class SiteStats(Base):

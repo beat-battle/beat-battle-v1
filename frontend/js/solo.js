@@ -6,36 +6,20 @@ import { getApiBase } from "./apiOrigin.js";
 import { setAppErrorContext } from "./errorToast.js";
 import {
   fetchKitManifest,
+  KIT_SOUND_KEYS,
   KIT_SOUND_FILE_EXT,
   loadDrumKitBase64Parallel,
   loadSynthBuffersAndMp3Base64Parallel,
   SYNTH_KEYS,
 } from "./kitFromSeed.js";
-import { mountKitLayoutShell } from "./kitGridLayout.js";
+import { kitSlotDisplayLabel, mountKitLayoutShell } from "./kitGridLayout.js";
 import { playSfxMajor, playSfxMinor, playSfxOn } from "./sfx.js";
 import { runSynthReveal } from "./synthReveal.js";
 
-const SOUND_KEYS = [
-  "snare",
-  "clap",
-  "hihat",
-  "open_hat",
-  "808",
-  "perc",
-  "fx",
-  "vox",
-  "synth1",
-  "synth2",
-  "synth3",
-  "kick",
-];
+const SOUND_KEYS = KIT_SOUND_KEYS;
 
 function base64ToAudioSrc(base64) {
   return "data:audio/ogg;base64," + base64;
-}
-
-function labelForKey(key) {
-  return key.replace(/_/g, " ");
 }
 
 function getWaveSurfer() {
@@ -152,7 +136,7 @@ export function mountSoloScreen(root, ctx) {
     head.className = "card-head";
     const title = document.createElement("h2");
     title.className = "card-title";
-    title.textContent = labelForKey(key);
+    title.textContent = kitSlotDisplayLabel(key, "trap");
     const dl = document.createElement("button");
     dl.type = "button";
     dl.className = "card-download";

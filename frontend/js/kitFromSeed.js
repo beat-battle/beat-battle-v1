@@ -4,22 +4,22 @@
 
 import { getCdnBase } from "./apiOrigin.js";
 
-const MANIFEST_STORAGE_KEY = "bb_kit_manifest_v6";
+const MANIFEST_STORAGE_KEY_PREFIX = "bb_kit_manifest_v17";
 const TARGET_RATE = 44100;
 
 export const KIT_SOUND_KEYS = [
-  "snare",
-  "clap",
-  "hihat",
-  "open_hat",
-  "808",
-  "perc",
+  "snares",
+  "claps",
+  "hihats",
+  "openhats",
+  "808s",
+  "percs",
   "fx",
-  "vox",
+  "Vox",
   "synth1",
   "synth2",
   "synth3",
-  "kick",
+  "kicks",
 ];
 
 export const SYNTH_KEYS = ["synth1", "synth2", "synth3"];
@@ -28,6 +28,120 @@ export const DRUM_KEYS = KIT_SOUND_KEYS.filter((k) => !k.startsWith("synth"));
 
 /** Dataset stems are OGG (CDN or /media/dataset); zips use this extension. */
 export const KIT_SOUND_FILE_EXT = "ogg";
+
+/** R2 trap pack root (``https://…/TrapRefined/<slot>/``). */
+export const CDN_TRAP_DRUM_PREFIX = "TrapRefined";
+
+const TRAP_LEGACY_PREFIXES = [
+  "beat-battle-assets/TrapRefined",
+  "beat-battle-assets/DRACO/TrapRefined",
+  "DRACO/TrapRefined",
+];
+
+function stripRel(rel) {
+  return String(rel || "").replace(/^\/+/, "");
+}
+
+function joinKey(base, tail) {
+  if (!tail) return base;
+  return `${base}/${tail}`.replace(/\/{2,}/g, "/");
+}
+
+/**
+ * Manifest / dataset relative path → CDN object key under ``TrapRefined/…``.
+ * Accepts legacy ``beat-battle-assets/…``, ``trap/<slot>/…``, and canonical ``TrapRefined/…``.
+ * @param {string} rel
+ * @returns {string}
+ */
+export function normalizeTrapDrumDatasetPath(rel) {
+  const s = stripRel(rel);
+  if (!s) return s;
+  const root = CDN_TRAP_DRUM_PREFIX;
+  if (s === root || s.startsWith(`${root}/`)) return s;
+  for (const leg of TRAP_LEGACY_PREFIXES) {
+    if (s === leg || s.startsWith(`${leg}/`)) {
+      const tail = s === leg ? "" : s.slice(leg.length + 1);
+      return tail ? joinKey(root, tail) : root;
+    }
+  }
+  if (s === "trap" || s.startsWith("trap/")) {
+    const tail = s === "trap" ? "" : s.slice("trap/".length);
+    return tail ? joinKey(root, tail) : root;
+  }
+  return s;
+}
+
+/** R2 EDM pack root (manifest logical paths use ``edm/<category>/``). */
+export const CDN_EDM_PREFIX = "EDM";
+
+const EDM_LEGACY_NESTED = "beat-battle-assets/EDM";
+
+/**
+ * Logical / legacy path → CDN key under ``EDM/…``.
+ * @param {string} rel
+ * @returns {string}
+ */
+export function normalizeEdmDatasetPath(rel) {
+  const s = stripRel(rel);
+  if (!s) return s;
+  const root = CDN_EDM_PREFIX;
+  if (s === root || s.startsWith(`${root}/`)) return s;
+  if (s === EDM_LEGACY_NESTED || s.startsWith(`${EDM_LEGACY_NESTED}/`)) {
+    const tail = s === EDM_LEGACY_NESTED ? "" : s.slice(EDM_LEGACY_NESTED.length + 1);
+    return tail ? joinKey(root, tail) : root;
+  }
+  return s;
+}
+
+/** ``edm/…`` in JSON → ``EDM/…`` fetch path. */
+function edmLogicalToCdnKey(rel) {
+  if (rel === "edm" || rel.startsWith("edm/")) {
+    const rest = rel === "edm" ? "" : rel.slice("edm/".length);
+    return joinKey(CDN_EDM_PREFIX, rest);
+  }
+  return rel;
+}
+
+/**
+ * @param {string | undefined | null} genre
+ * @returns {"trap" | "edm"}
+ */
+export function normalizeKitGenre(genre) {
+  const s = String(genre ?? "trap").trim().toLowerCase();
+  return s === "edm" ? "edm" : "trap";
+}
+
+/**
+ * Map manifest-relative paths to CDN object keys.
+ * @param {string} relPath
+ * @param {string} [genre]
+ * @returns {string}
+ */
+export function cdnDatasetRelPath(relPath, genre = "trap") {
+  const g = normalizeKitGenre(genre);
+  const raw = stripRel(relPath);
+  if (!raw) return "";
+  if (g === "edm") {
+    return edmLogicalToCdnKey(normalizeEdmDatasetPath(raw));
+  }
+  return normalizeTrapDrumDatasetPath(raw);
+}
+
+/**
+ * Path under ``dataset/`` for ``GET /media/dataset/…`` (matches R2 layout for EDM).
+ * @param {string} relPath
+ * @param {string} [genre]
+ * @returns {string}
+ */
+export function mediaPathForDatasetMount(relPath, genre = "trap") {
+  const g = normalizeKitGenre(genre);
+  const raw = stripRel(relPath);
+  if (!raw) return "";
+  if (g === "edm") {
+    return edmLogicalToCdnKey(normalizeEdmDatasetPath(raw));
+  }
+  return normalizeTrapDrumDatasetPath(raw);
+}
 
 function float32Bits(x) {
   const buf = new ArrayBuffer(4);
@@ -65,54 +179,112 @@ export function pickIndex(seed, slotIndex, spice, n) {
  * @param {string} apiBase
  * @returns {Promise<{ version?: number; sampleRate?: number; keys: Record<string, string[]> }>}
  */
-function isValidManifestShape(data) {
-  return (
-    data &&
-    typeof data === "object" &&
-    typeof data.keys === "object" &&
-    data.keys != null &&
-    Array.isArray(data.keys.snare) &&
-    Array.isArray(data.keys.synth1)
-  );
+/** Legacy CDN manifests used singular keys (``snare`` → ``snares``); see ``KIT_MANIFEST_CDN_FILES_TRAP``. */
+const LEGACY_KIT_KEY_MAP = {
+  snare: "snares",
+  clap: "claps",
+  hihat: "hihats",
+  open_hat: "openhats",
+  "808": "808s",
+  perc: "percs",
+  kick: "kicks",
+  vox: "Vox",
+};
+
+/**
+ * @param {{ keys?: Record<string, unknown> } | null | undefined} data
+ * @returns {typeof data}
+ */
+function normalizeLegacyKitManifestKeys(data) {
+  if (!data || typeof data !== "object" || typeof data.keys !== "object" || !data.keys)
+    return data;
+  const keys = data.keys;
+  for (const [oldKey, newKey] of Object.entries(LEGACY_KIT_KEY_MAP)) {
+    if (keys[newKey] !== undefined) continue;
+    const v = keys[oldKey];
+    if (Array.isArray(v)) keys[newKey] = v;
+  }
+  return data;
+}
+
+/** EDM kits may omit a dedicated 808 folder (see ``_EDM_FOLDER_BY_LOGICAL``). */
+const EDM_MANIFEST_OPTIONAL_EMPTY = new Set(["808s"]);
+
+function manifestSlotNonEmpty(key, genre) {
+  const g = normalizeKitGenre(genre);
+  if (g === "edm" && EDM_MANIFEST_OPTIONAL_EMPTY.has(key)) return false;
+  return true;
+}
+
+function isValidManifestShape(data, genre = "trap") {
+  if (!data || typeof data !== "object" || typeof data.keys !== "object" || !data.keys)
+    return false;
+  return KIT_SOUND_KEYS.every((k) => {
+    const arr = data.keys[k];
+    if (!Array.isArray(arr)) return false;
+    if (arr.length > 0) return true;
+    return !manifestSlotNonEmpty(k, genre);
+  });
 }
 
 /**
- * Kit manifest: try CDN ``/kit-manifest.json`` when ``beat-battle-cdn`` is set, else ``GET /api/kit-manifest``.
+ * Kit manifest: same CDN base as kit audio — files at bucket root
+ * (``…/kit-manifest-trap-refined.json``, ``…/kit-manifest-edm-refined.json``), else API.
  */
-export async function fetchKitManifest(apiBase) {
+const KIT_MANIFEST_CDN_FILES_TRAP = [
+  "kit-manifest-trap-refined.json",
+  "kit-manifest-refined.json",
+  "kit-manifest.json",
+];
+
+const KIT_MANIFEST_CDN_FILES_EDM = ["kit-manifest-edm-refined.json"];
+
+/**
+ * @param {string} apiBase
+ * @param {string} [genre] trap | edm
+ * @returns {Promise<{ version?: number; sampleRate?: number; keys: Record<string, string[]> }>}
+ */
+export async function fetchKitManifest(apiBase, genre = "trap") {
+  const g = normalizeKitGenre(genre);
+  const storageKey = `${MANIFEST_STORAGE_KEY_PREFIX}_${g}`;
   try {
-    const raw = sessionStorage.getItem(MANIFEST_STORAGE_KEY);
+    const raw = sessionStorage.getItem(storageKey);
     if (raw) return JSON.parse(raw);
   } catch {
     /* ignore */
   }
   const cdn = getCdnBase().replace(/\/+$/, "");
+  const cdnFiles = g === "edm" ? KIT_MANIFEST_CDN_FILES_EDM : KIT_MANIFEST_CDN_FILES_TRAP;
   if (cdn) {
-    try {
-      const cdnRes = await fetch(`${cdn}/kit-manifest.json`, {
-        cache: "no-store",
-      });
-      if (cdnRes.ok) {
-        const data = await cdnRes.json();
-        if (isValidManifestShape(data)) {
-          try {
-            sessionStorage.setItem(MANIFEST_STORAGE_KEY, JSON.stringify(data));
-          } catch {
-            /* ignore */
+    for (const name of cdnFiles) {
+      try {
+        const cdnRes = await fetch(`${cdn}/${name}`, {
+          cache: "no-store",
+        });
+        if (cdnRes.ok) {
+          const data = normalizeLegacyKitManifestKeys(await cdnRes.json());
+          if (isValidManifestShape(data, g)) {
+            try {
+              sessionStorage.setItem(storageKey, JSON.stringify(data));
+            } catch {
+              /* ignore */
+            }
+            return data;
           }
-          return data;
         }
+      } catch {
+        /* try next */
       }
-    } catch {
-      /* ignore */
     }
   }
   const base = apiBase.replace(/\/+$/, "");
-  const res = await fetch(`${base}/api/kit-manifest`);
+  const res = await fetch(
+    `${base}/api/kit-manifest?genre=${encodeURIComponent(g)}`,
+  );
   if (!res.ok) throw new Error(`kit-manifest: ${res.status}`);
-  const data = await res.json();
+  const data = normalizeLegacyKitManifestKeys(await res.json());
   try {
-    sessionStorage.setItem(MANIFEST_STORAGE_KEY, JSON.stringify(data));
+    sessionStorage.setItem(storageKey, JSON.stringify(data));
   } catch {
     /* ignore */
   }
@@ -157,13 +329,18 @@ function assertOggPayload(relPath, arr) {
 }
 
 /**
- * Preferred URL for a dataset file (CDN when configured, else API). Fetches should use
- * {@link fetchDatasetArrayBuffer} so a failed CDN response can fall back to `/media/dataset/`.
- * Manifest paths: ``trap/synths/x.ogg`` → ``https://assets.beat-battle.net/trap/synths/x.ogg``.
+ * Preferred URL for a dataset file (CDN when configured, else API).
+ * When a CDN base is set, kit audio is loaded only from that host (R2); there is no
+ * fallback to ``/media/dataset/`` so missing CDN keys fail loudly instead of 404ing the API.
+ * Trap: ``trap/snares/…`` / ``trap/synths/…`` → ``TrapRefined/…``;
+ * EDM: ``edm/hihats/…`` → ``EDM/…``.
  */
-export function datasetMediaUrl(apiBase, relPath) {
-  const enc = encodedDatasetPath(relPath);
+export function datasetMediaUrl(apiBase, relPath, genre = "trap") {
   const cdn = getCdnBase().replace(/\/+$/, "");
+  const logicalPath = cdn
+    ? cdnDatasetRelPath(relPath, genre)
+    : mediaPathForDatasetMount(relPath, genre);
+  const enc = encodedDatasetPath(logicalPath);
   if (cdn && enc) return `${cdn}/${enc}`;
   const base = apiBase.replace(/\/+$/, "");
   return `${base}/media/dataset/${enc}`;
@@ -174,14 +351,16 @@ export function datasetMediaUrl(apiBase, relPath) {
  * @param {string} relPath
  * @returns {Promise<ArrayBuffer>} OGG bytes (validated)
  */
-async function fetchDatasetArrayBuffer(apiBase, relPath) {
-  const enc = encodedDatasetPath(relPath);
-  if (!enc) throw new Error(`Invalid dataset path: ${relPath}`);
+async function fetchDatasetArrayBuffer(apiBase, relPath, genre = "trap") {
+  const mountPath = mediaPathForDatasetMount(relPath, genre);
+  const apiEnc = encodedDatasetPath(mountPath);
+  if (!apiEnc) throw new Error(`Invalid dataset path: ${relPath}`);
   const base = apiBase.replace(/\/+$/, "");
-  const apiUrl = `${base}/media/dataset/${enc}`;
+  const apiUrl = `${base}/media/dataset/${apiEnc}`;
   const cdn = getCdnBase().replace(/\/+$/, "");
   if (cdn) {
-    const cdnUrl = `${cdn}/${enc}`;
+    const cdnEnc = encodedDatasetPath(cdnDatasetRelPath(relPath, genre));
+    const cdnUrl = `${cdn}/${cdnEnc}`;
     try {
       const res = await fetch(cdnUrl);
       if (res.ok) {
@@ -189,8 +368,15 @@ async function fetchDatasetArrayBuffer(apiBase, relPath) {
         assertOggPayload(relPath, arr);
         return arr;
       }
-    } catch {
-      /* fall through to API */
+      throw new Error(
+        `CDN ${cdnUrl} returned HTTP ${res.status} for ${relPath}. Kit audio is expected on R2 at that object key (no /media/dataset fallback when CDN is configured).`,
+      );
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith("CDN ")) throw e;
+      const hint = e instanceof Error ? e.message : String(e);
+      throw new Error(
+        `CDN fetch failed for ${relPath} (${cdnUrl}): ${hint}. Fix R2/CORS or set beatBattleCdnBase / beat-battle-cdn meta.`,
+      );
     }
   }
   const res = await fetch(apiUrl);
@@ -222,8 +408,8 @@ function arrayBufferToBase64(buffer) {
  * @param {string} relPath
  * @returns {Promise<string>} base64 OGG (dataset file bytes)
  */
-async function fetchMediaKitBase64(apiBase, relPath) {
-  const arr = await fetchDatasetArrayBuffer(apiBase, relPath);
+async function fetchMediaKitBase64(apiBase, relPath, genre = "trap") {
+  const arr = await fetchDatasetArrayBuffer(apiBase, relPath, genre);
   return arrayBufferToBase64(arr);
 }
 
@@ -249,8 +435,13 @@ export async function resampleTo44100(audioBuffer) {
  * @param {string} relPath
  * @returns {Promise<AudioBuffer>}
  */
-export async function fetchDecodeResample(audioContext, apiBase, relPath) {
-  const arr = await fetchDatasetArrayBuffer(apiBase, relPath);
+export async function fetchDecodeResample(
+  audioContext,
+  apiBase,
+  relPath,
+  genre = "trap",
+) {
+  const arr = await fetchDatasetArrayBuffer(apiBase, relPath, genre);
   let decoded;
   try {
     decoded = await audioContext.decodeAudioData(arr.slice(0));
@@ -329,6 +520,7 @@ export async function loadSynthBuffersAndMp3Base64Parallel({
   apiBase,
   audioContext,
   manifest,
+  genre = "trap",
 }) {
   const keysObj = manifest.keys;
   const buffers = /** @type {Record<string, AudioBuffer>} */ ({});
@@ -340,7 +532,7 @@ export async function loadSynthBuffersAndMp3Base64Parallel({
       if (!paths?.length) throw new Error(`No samples for ${key}`);
       const idx = pickIndex(seed, slot, spice, paths.length);
       const relPath = paths[idx];
-      const arr = await fetchDatasetArrayBuffer(apiBase, relPath);
+      const arr = await fetchDatasetArrayBuffer(apiBase, relPath, genre);
       base64[key] = arrayBufferToBase64(arr);
       try {
         const decoded = await audioContext.decodeAudioData(arr.slice(0));
@@ -388,6 +580,7 @@ export async function loadDrumKitBase64Parallel({
   apiBase,
   manifest,
   onProgress,
+  genre = "trap",
 }) {
   const keysObj = manifest.keys;
   const total = DRUM_KEYS.length;
@@ -396,9 +589,13 @@ export async function loadDrumKitBase64Parallel({
     DRUM_KEYS.map(async (key) => {
       const slot = KIT_SOUND_KEYS.indexOf(key);
       const paths = keysObj[key];
-      if (!paths?.length) throw new Error(`No samples for ${key}`);
+      if (!paths?.length) {
+        done += 1;
+        onProgress?.({ key, step: done, total });
+        return [key, ""];
+      }
       const idx = pickIndex(seed, slot, spice, paths.length);
-      const b64 = await fetchMediaKitBase64(apiBase, paths[idx]);
+      const b64 = await fetchMediaKitBase64(apiBase, paths[idx], genre);
       done += 1;
       onProgress?.({ key, step: done, total });
       return [key, b64];
@@ -415,17 +612,27 @@ export async function loadDrumKitBase64Parallel({
  * @param {string} p.apiBase
  * @param {(ev: { key: string; step: number; total: number }) => void} [p.onProgress]
  */
-export async function buildKitFromSeed({ seed, spice, apiBase, onProgress }) {
-  const manifest = await fetchKitManifest(apiBase);
+export async function buildKitFromSeed({
+  seed,
+  spice,
+  apiBase,
+  onProgress,
+  genre = "trap",
+}) {
+  const manifest = await fetchKitManifest(apiBase, genre);
   const keysObj = manifest.keys;
   const out = /** @type {Record<string, string>} */ ({});
   const n = KIT_SOUND_KEYS.length;
   for (let i = 0; i < n; i++) {
     const key = KIT_SOUND_KEYS[i];
     const paths = keysObj[key];
-    if (!paths?.length) throw new Error(`No samples for ${key}`);
+    if (!paths?.length) {
+      out[key] = "";
+      onProgress?.({ key, step: i + 1, total: n });
+      continue;
+    }
     const idx = pickIndex(seed, i, spice, paths.length);
-    out[key] = await fetchMediaKitBase64(apiBase, paths[idx]);
+    out[key] = await fetchMediaKitBase64(apiBase, paths[idx], genre);
     onProgress?.({ key, step: i + 1, total: n });
   }
   return out;
