@@ -4,8 +4,8 @@ Build ``/api/kit-manifest`` payload: sorted media paths per logical kit key (mat
 Trap — resolution order for :func:`get_kit_manifest_cached`:
 
 1. ``KIT_MANIFEST_PATH`` — local JSON file (e.g. from ``misc/scripts/build_kit_manifest_refined.py``).
-2. ``KIT_MANIFEST_URL`` — HTTP(S) JSON. If **unset**, tries the production CDN (in order)
-   ``kit-manifest-trap-refined.json``, then ``kit-manifest-refined.json``.
+2. ``KIT_MANIFEST_URL`` — HTTP(S) JSON. If **unset**, uses production CDN
+   ``kit-manifest-trap-refined.json`` only (no legacy manifest fallbacks).
    Set ``KIT_MANIFEST_URL=`` (empty) to skip remote and use disk.
 3. Scan disk: ``dataset/TrapRefined/`` if present, else ``dataset/beat-battle-assets/TrapRefined/``,
    else ``dataset/beat-battle-assets/DRACO/TrapRefined/``, else ``dataset/trap/``.
@@ -37,7 +37,6 @@ _PROJECT_ROOT = DATASET_ROOT.parent
 _DEFAULT_KIT_MANIFEST_BASE = "https://assets.beat-battle.net"
 _DEFAULT_KIT_MANIFEST_URLS: tuple[str, ...] = (
     f"{_DEFAULT_KIT_MANIFEST_BASE}/kit-manifest-trap-refined.json",
-    f"{_DEFAULT_KIT_MANIFEST_BASE}/kit-manifest-refined.json",
 )
 
 
@@ -50,7 +49,7 @@ def _configured_kit_manifest_path() -> Path | None:
 
 
 def _remote_kit_manifest_urls() -> list[str] | None:
-    """Explicit ``KIT_MANIFEST_URL`` is a single URL; unset uses CDN defaults (trap-refined then legacy)."""
+    """Explicit ``KIT_MANIFEST_URL`` is a single URL; unset uses CDN ``kit-manifest-trap-refined.json`` only."""
     if "KIT_MANIFEST_URL" in os.environ:
         v = os.environ["KIT_MANIFEST_URL"].strip()
         return None if not v else [v]
@@ -252,6 +251,9 @@ _EDM_FOLDER_BY_LOGICAL: dict[str, str] = {
     "fx": "fx",
     "Vox": "shakersriders",
 }
+
+# Current EDM CDN layout has no ``EDM/808s/`` (low end is in ``kicks/``); ``keys["808s"]`` may be [].
+EDM_MANIFEST_OPTIONAL_KEYS: frozenset[str] = frozenset({"808s"})
 
 # R2 / pack layouts: canonical names match ``_EDM_FOLDER_BY_LOGICAL`` values;
 # aliases cover common pack folder naming (must match real bucket prefixes).
