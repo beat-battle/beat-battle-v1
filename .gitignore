@@ -12,9 +12,9 @@ __pycache__/
 *.pyc
 .env
 
-# Local tooling, ML weights, scratch outputs — not for GitHub or Render
+
 misc/
 .pytest_cache/
 
-# Exceeds GitHub's 100 MB blob limit — keep locally or use Git LFS
+# Too big for github
 dataset/trap/synths.zip

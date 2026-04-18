@@ -29,6 +29,67 @@
   --text: #f0f0f0;
   --text-muted: #9a9a9a;
   --text-heading: #ffffff;
+  /* Subtle 1px extrusion (matches arcade title) */
+  --ui-text-depth: 1px 1px 0 #747474;
+  --ui-red-name-depth: 1px 1px 0 rgba(138, 9, 9, 0.92);
+}
+
+/* Hero / heading light type — shared 1px extrusion */
+.title,
+.arcade-title,
+.arcade-heading,
+.field-label,
+.field-value,
+.status,
+.card-title,
+.kit-section-heading,
+.arcade-label,
+.lobby-settings-summary,
+.cook-timer,
+.mp-phase-timer-label,
+.vote-timer-label,
+.upload-timer,
+.results-winner,
+.results-beat-vote-count,
+.profile-name,
+.profile-stat-value,
+.profile-comments-title,
+.profile-comment-author,
+.credits-entry-name,
+.lb-row > span:last-child,
+.rank-up-title,
+.synth-reveal-heading,
+.server-restart-title,
+.mp-reconnect-menu-title,
+.app-error-toast-msg,
+.mp-chat-label,
+.corner-social-tooltip,
+.lobby-ready,
+.arcade-back,
+.lobby-kit-overlay-title,
+.lobby-wave-toast-name,
+.mp-presence-toast-text,
+.arcade-btn,
+.arcade-btn-primary,
+.arcade-btn-secondary,
+.arcade-btn-fire,
+.btn,
+.btn-primary,
+.btn-secondary,
+.card-download,
+.lobby-emoji-btn,
+.lobby-wave-btn,
+.slideshow-reaction-btn,
+.server-row:not(.server-row-head) > span {
+  text-shadow: var(--ui-text-depth);
+}
+
+/* Red / accent labels — dark red extrusion */
+.credits-panel-title,
+.server-row-head > span,
+.arcade-error,
+.profile-avatar-letter {
+  text-shadow: var(--ui-red-name-depth);
 }
 
 html {
@@ -1773,6 +1834,7 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   color: var(--red);
   font-size: 0.8rem;
   letter-spacing: 0.06em;
+  text-shadow: var(--ui-red-name-depth);
 }
 
 .slideshow-reactions {
@@ -2096,6 +2158,7 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   font-size: 1.1rem;
   color: var(--red-bright);
   margin-top: 0.35rem;
+  text-shadow: var(--ui-red-name-depth);
 }
 
 .results-no-winner-2p {
@@ -2395,6 +2458,11 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   overflow: visible;
 }
 
+/* Hamburger + social tiles — depth on glyphs (SVG / raster) */
+.corner-social-stack .corner-social-icon {
+  filter: drop-shadow(1px 1px 0 rgb(130, 130, 130));
+}
+
 /* Icon swap: opening — burger shrinks first (delay 0), X grows after 0.2s.
    closing — X shrinks first (delay 0), burger grows after 0.2s. Same 0.2s + pop easing. */
 .corner-social-menu-burger {
@@ -2470,7 +2538,7 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   justify-content: center;
   width: 76px;
   height: 76px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(8, 6, 6, 0.94);
   backdrop-filter: blur(8px);
@@ -2503,7 +2571,7 @@ body.mp-chat-open .app-root:has(#sound-grid:not(.hidden)) {
   margin: 0;
   padding: 0;
   cursor: pointer;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(8, 6, 6, 0.94);
   backdrop-filter: blur(8px);
@@ -2718,6 +2786,7 @@ button.auth-corner-card.auth-corner-menu-toggle {
   letter-spacing: 0.06em;
   max-width: 100%;
   word-break: break-word;
+  text-shadow: var(--ui-red-name-depth);
 }
 
 .auth-corner-wins {
