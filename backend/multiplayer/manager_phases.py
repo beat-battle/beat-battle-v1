@@ -9,7 +9,7 @@ import asyncio
 import time
 from typing import TYPE_CHECKING, Any
 
-from ..auth import increment_wins_for_users
+from ..auth import increment_games_played_for_users, increment_wins_for_users
 from ..database import SessionLocal
 from .lobby import (
     COOK_DURATION_MIN_OPTIONS,
@@ -244,6 +244,7 @@ async def vote_collection_loop(manager: LobbyManager, lobby_id: str) -> None:
 
 async def finalize_results(manager: LobbyManager, lobby_id: str) -> None:
     winner_user_ids: list[int] = []
+    all_user_ids: list[int] = []
     payload: dict[str, Any] | None = None
     winners: list[str] = []
     async with manager._with_lobby_lock(lobby_id):
@@ -257,22 +258,28 @@ async def finalize_results(manager: LobbyManager, lobby_id: str) -> None:
             lobby, lobby_id
         )
         winners = list(payload.get("winner_ids") or [])
+        # Collect all participant user_ids for games_played bump
+        all_user_ids = [
+            p.user_id for p in lobby.players.values() if p.user_id is not None
+        ]
 
     if payload is None:
         return
 
     await manager.broadcast(lobby_id, payload)
 
-    if winner_user_ids:
-
-        def _persist_wins() -> None:
-            db = SessionLocal()
-            try:
+    # Persist: bump games_played for everyone, wins for winners only
+    def _persist_stats() -> None:
+        db = SessionLocal()
+        try:
+            if all_user_ids:
+                increment_games_played_for_users(db, all_user_ids)
+            if winner_user_ids:
                 increment_wins_for_users(db, winner_user_ids)
-            finally:
-                db.close()
+        finally:
+            db.close()
 
-        await asyncio.to_thread(_persist_wins)
+    await asyncio.to_thread(_persist_stats)
 
     async with manager._with_lobby_lock(lobby_id):
         lobby_after = manager.lobbies.get(lobby_id)
@@ -281,3 +288,4 @@ async def finalize_results(manager: LobbyManager, lobby_id: str) -> None:
                 pl = lobby_after.players.get(wid)
                 if pl is not None:
                     pl.wins += 1
+

@@ -67,7 +67,11 @@ select,
 .rank-up-title,
 .dev-stats-panel__card,
 .credits-entry-name,
-.credits-entry-role {
+.credits-entry-role,
+.profile-name,
+.profile-bio-text,
+.profile-comment-author,
+.profile-comment-text {
   text-transform: none;
 }
 
@@ -3268,4 +3272,429 @@ button.auth-corner-card.auth-corner-menu-toggle {
 
 .rank-up-dismiss {
   min-width: 7rem;
+}
+
+/* ---- Profile screen ---- */
+
+.profile-screen {
+  max-width: 640px;
+  margin-inline: auto;
+}
+
+.profile-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Card */
+
+.profile-card {
+  background: #111;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1.25rem;
+}
+
+.profile-card-top {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.profile-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.profile-avatar {
+  width: 72px;
+  height: 72px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a0a;
+}
+
+.profile-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-avatar-letter {
+  font-size: 1.6rem;
+  color: var(--red);
+  font-weight: 700;
+}
+
+.profile-avatar-upload {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.profile-avatar-wrap:hover .profile-avatar-upload {
+  opacity: 1;
+}
+
+.profile-avatar-edit-icon {
+  font-size: 1.2rem;
+  color: #fff;
+}
+
+.profile-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.profile-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-heading);
+  word-break: break-word;
+}
+
+.profile-rank-icon {
+  display: flex;
+  align-items: center;
+  margin-top: 0.15rem;
+}
+
+.profile-rank-icon .rank-badge {
+  margin-right: 0;
+}
+
+.profile-rank-icon .rank-badge__img {
+  width: 2.4em;
+  height: 2.4em;
+}
+
+/* Bio */
+
+.profile-bio-text {
+  margin: 0;
+  font-family: "BodyPixelFont", "Segoe UI", system-ui, sans-serif;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text);
+  text-transform: none;
+}
+
+.profile-bio-edit {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #0a0a0a;
+  padding: 0.55rem 0.65rem;
+  font-family: inherit;
+  font-size: 0.75rem;
+}
+
+.profile-bio-input {
+  resize: none;
+  min-height: 2rem;
+  flex: 1;
+  font-family: "BodyPixelFont", "Segoe UI", system-ui, sans-serif;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  text-transform: none;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+}
+
+.profile-bio-input::placeholder {
+  color: var(--text-muted);
+}
+
+.profile-bio-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.35rem;
+}
+
+.profile-bio-chars {
+  font-size: 0.52rem;
+  color: var(--text-muted);
+}
+
+.profile-bio-save {
+  padding: 0.15rem 0.55rem;
+  font-size: 0.55rem;
+}
+
+/* Card body — bio left, stats right */
+
+.profile-card-body {
+  display: flex;
+  gap: 1rem;
+  align-items: stretch;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 0.85rem;
+}
+
+.profile-bio-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-stats-col {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding-left: 1rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  min-width: 64px;
+}
+
+/* Stats (shared) */
+
+.profile-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.profile-stat-value {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-heading);
+  white-space: nowrap;
+}
+
+.profile-stat-label {
+  font-size: 0.52rem;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+/* Comments */
+
+.profile-comments-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.profile-comments-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.profile-comments-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-heading);
+}
+
+.profile-comments-count {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+
+.profile-comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.profile-comment-input {
+  resize: none;
+  min-height: 3rem;
+  max-height: 6rem;
+  width: 100%;
+  max-width: none;
+  margin-bottom: 0;
+  font-family: "BodyPixelFont", "Segoe UI", system-ui, sans-serif;
+  font-size: 0.82rem;
+  text-transform: none;
+}
+
+.profile-comment-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.profile-comment-chars {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+}
+
+.profile-comment-submit {
+  padding: 0.35rem 0.9rem;
+  font-size: 0.62rem;
+}
+
+.profile-login-hint {
+  font-size: 0.68rem;
+}
+
+/* Comment cards */
+
+.profile-comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.profile-comment {
+  display: flex;
+  gap: 0.6rem;
+  background: #0e0e0e;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0.6rem 0.7rem;
+  transition: border-color 0.15s ease;
+}
+
+.profile-comment:hover {
+  border-color: rgba(224, 32, 32, 0.25);
+}
+
+.profile-comment-avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.profile-comment-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-comment-avatar-letter {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.profile-comment-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+
+.profile-comment-author {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-heading);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-comment-author:hover {
+  color: var(--red);
+}
+
+.profile-comment-time {
+  font-size: 0.52rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.profile-comment-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.65rem;
+  padding: 0 0.2rem;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.profile-comment:hover .profile-comment-delete {
+  opacity: 1;
+}
+
+.profile-comment-delete:hover {
+  color: var(--red);
+}
+
+.profile-comment-text {
+  font-family: "BodyPixelFont", "Segoe UI", system-ui, sans-serif;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--text);
+  word-break: break-word;
+  text-transform: none;
+}
+
+/* Topbar (shared w/ leaderboard) */
+
+.screen-topbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.screen-topbar-title {
+  flex: 1;
+  text-align: center;
+  margin: 0;
+}
+
+.screen-topbar-spacer {
+  width: 1.65rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .profile-card-top {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .profile-card-body {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .profile-stats-col {
+    flex-direction: row;
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-left: 0;
+    padding-top: 0.6rem;
+    justify-content: center;
+    gap: 1.5rem;
+  }
 }

@@ -71,7 +71,17 @@ function boot() {
     unmount = mountFn(root, ctx);
   };
 
-  navigate(mountModeSelectScreen);
+  // Check for /@username profile URL
+  const profileMatch = window.location.pathname.match(/^\/@([^/]+)/);
+  if (profileMatch) {
+    import("./screens/profileScreen.js").then((m) => {
+      navigate(m.mountProfileScreen, {
+        profileUsername: decodeURIComponent(profileMatch[1]),
+      });
+    });
+  } else {
+    navigate(mountModeSelectScreen);
+  }
 
   if (isLoggedIn()) {
     void validateSession().then((ok) => {
@@ -82,3 +92,4 @@ function boot() {
 }
 
 document.addEventListener("DOMContentLoaded", boot);
+

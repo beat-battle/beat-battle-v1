@@ -139,3 +139,35 @@ class BeatUploadCompleteResponse(BaseModel):
 
 class BeatUploadCapabilitiesResponse(BaseModel):
     r2_direct: bool
+
+
+# ---- Profile ----
+
+
+class ProfileResponse(BaseModel):
+    username: str
+    wins: int
+    games_played: int = 0
+    rank: RankInfo | None = None
+    rank_index: int = 0
+    bio: str | None = None
+    avatar_url: str | None = None
+    created_at: str
+    comment_count: int = 0
+
+
+class ProfileCommentOut(BaseModel):
+    id: int
+    author_username: str
+    author_rank: RankInfo | None = None
+    author_avatar_url: str | None = None
+    content: str
+    created_at: str
+
+
+class ProfileCommentCreate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=500)
+
+
+class ProfileUpdateBio(BaseModel):
+    bio: str = Field("", max_length=200)

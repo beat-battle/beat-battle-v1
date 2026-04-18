@@ -87,6 +87,10 @@ def init_db() -> None:
     from . import models  # noqa: F401 — register models
 
     Base.metadata.create_all(bind=engine)
+
+    # Auto-migrate: add games_played column if missing (create_all won't add columns to existing tables)
+    _add_column_if_missing("users", "games_played", "INTEGER NOT NULL DEFAULT 0")
+
     db = SessionLocal()
     try:
         row = db.get(models.SiteStats, 1)
@@ -96,6 +100,19 @@ def init_db() -> None:
         _seed_supporters_if_empty(db)
     finally:
         db.close()
+
+
+def _add_column_if_missing(table: str, column: str, col_type: str) -> None:
+    """Best-effort ADD COLUMN — works on both SQLite and PostgreSQL."""
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        try:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+            conn.commit()
+        except Exception:
+            # Column already exists — nothing to do
+            conn.rollback()
 
 
 def _seed_supporters_if_empty(db: Session) -> None:

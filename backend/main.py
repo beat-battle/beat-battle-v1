@@ -35,20 +35,22 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, ORJSONResponse, RedirectResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .auth import create_ws_ticket, get_current_user, invalidate_user_cache, login_user, register_user
 from . import beats_r2
+from . import avatar_r2
 from .beat_upload_trim import trim_beat_upload_to_ogg
 from .database import get_db, init_db
 from .generator import generate_kit_light
 from .kit_manifest import get_kit_manifest_cached
 from .kit_payload import encode_paths_to_sounds
-from .models import SiteStats, Supporter, User
+from .models import ProfileComment, SiteStats, Supporter, User
 from .multiplayer import LobbyManager
 from .multiplayer.lobby import LobbyState
 from .multiplayer.ws import router as ws_router
@@ -63,6 +65,10 @@ from .schemas import (
     LeaderboardEntry,
     LoginRequest,
     MeResponse,
+    ProfileCommentCreate,
+    ProfileCommentOut,
+    ProfileResponse,
+    ProfileUpdateBio,
     RankInfo,
     RegisterRequest,
     RegisterResponse,
@@ -100,6 +106,26 @@ MAX_BEAT_BYTES = 30 * 1024 * 1024
 
 # Must match the stored username exactly (case-sensitive); do not compare with .lower().
 _ALLOWED_DEV_STATS_USERS = frozenset({"psyalysis", "polystalgia"})
+
+_COMMENT_LIMIT = SlidingWindowRateLimiter(max_events=3, window_s=30.0)
+
+
+def get_optional_user(
+    creds: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False)),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """Like get_current_user but returns None for unauthenticated requests."""
+    if creds is None or creds.scheme.lower() != "bearer":
+        return None
+    try:
+        from .auth import decode_token, get_user_by_id
+        payload = decode_token(creds.credentials)
+        if payload.get("typ") == "ws_ticket":
+            return None
+        uid = int(payload["sub"])
+        return get_user_by_id(db, uid)
+    except Exception:
+        return None
 
 
 def _require_dev_stats_user(user: User) -> None:
@@ -814,6 +840,176 @@ async def get_beat(
     raise HTTPException(status_code=404, detail="Beat not found.")
 
 
+# ---- Profile API ----
+
+
+@app.get("/api/profile/{username}", response_model=ProfileResponse)
+def get_profile(
+    username: str,
+    db: Session = Depends(get_db),
+) -> ProfileResponse:
+    user = (
+        db.query(User)
+        .filter(func.lower(User.username) == username.strip().lower())
+        .first()
+    )
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    r = rank_for_wins(user.wins)
+    rank = RankInfo(key=r["key"], abbrev=r["abbrev"], label=r["label"], color=r["color"]) if r else None
+    comment_count = db.query(ProfileComment).filter(ProfileComment.profile_id == user.id).count()
+    return ProfileResponse(
+        username=user.username,
+        wins=user.wins,
+        games_played=user.games_played,
+        rank=rank,
+        rank_index=rank_index_for_wins(user.wins),
+        bio=user.bio,
+        avatar_url=user.avatar_url,
+        created_at=user.created_at.isoformat() + "Z",
+        comment_count=comment_count,
+    )
+
+
+@app.get("/api/profile/{username}/comments", response_model=list[ProfileCommentOut])
+def get_profile_comments(
+    username: str,
+    page: int = Query(1, ge=1),
+    db: Session = Depends(get_db),
+) -> list[ProfileCommentOut]:
+    user = (
+        db.query(User)
+        .filter(func.lower(User.username) == username.strip().lower())
+        .first()
+    )
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    per_page = 50
+    comments = (
+        db.query(ProfileComment)
+        .filter(ProfileComment.profile_id == user.id)
+        .order_by(ProfileComment.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    out: list[ProfileCommentOut] = []
+    for c in comments:
+        author = db.get(User, c.author_id)
+        if not author:
+            continue
+        ar = rank_for_wins(author.wins)
+        a_rank = RankInfo(key=ar["key"], abbrev=ar["abbrev"], label=ar["label"], color=ar["color"]) if ar else None
+        out.append(ProfileCommentOut(
+            id=c.id,
+            author_username=author.username,
+            author_rank=a_rank,
+            author_avatar_url=author.avatar_url,
+            content=c.content,
+            created_at=c.created_at.isoformat() + "Z",
+        ))
+    return out
+
+
+@app.post("/api/profile/{username}/comments", response_model=ProfileCommentOut)
+def post_profile_comment(
+    username: str,
+    body: ProfileCommentCreate,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ProfileCommentOut:
+    ip = request.client.host if request.client else "unknown"
+    if not _COMMENT_LIMIT.check(f"comment:{user.id}:{ip}"):
+        raise HTTPException(status_code=429, detail="Too many comments. Try again later.")
+    target = (
+        db.query(User)
+        .filter(func.lower(User.username) == username.strip().lower())
+        .first()
+    )
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+    comment = ProfileComment(
+        profile_id=target.id,
+        author_id=user.id,
+        content=body.content.strip(),
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    ar = rank_for_wins(user.wins)
+    a_rank = RankInfo(key=ar["key"], abbrev=ar["abbrev"], label=ar["label"], color=ar["color"]) if ar else None
+    return ProfileCommentOut(
+        id=comment.id,
+        author_username=user.username,
+        author_rank=a_rank,
+        author_avatar_url=user.avatar_url,
+        content=comment.content,
+        created_at=comment.created_at.isoformat() + "Z",
+    )
+
+
+@app.delete("/api/profile/comments/{comment_id}")
+def delete_profile_comment(
+    comment_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    comment = db.get(ProfileComment, comment_id)
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found.")
+    # Author can delete own; devs can delete any
+    if comment.author_id != user.id and user.username not in _ALLOWED_DEV_STATS_USERS:
+        raise HTTPException(status_code=403, detail="Not allowed.")
+    db.delete(comment)
+    db.commit()
+    return {"ok": True}
+
+
+@app.patch("/api/me/profile")
+def patch_my_profile(
+    body: ProfileUpdateBio,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    user.bio = body.bio.strip() if body.bio else None
+    db.commit()
+    invalidate_user_cache(user.id)
+    return {"ok": True, "bio": user.bio}
+
+
+@app.post("/api/me/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    ct = (file.content_type or "").strip().lower()
+    if ct not in avatar_r2.ALLOWED_AVATAR_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="Only PNG, JPEG, WebP, or GIF images are allowed.")
+
+    data = await file.read()
+    if len(data) > avatar_r2.MAX_AVATAR_BYTES:
+        raise HTTPException(status_code=400, detail="Avatar too large (max 2 MB).")
+    if len(data) < 100:
+        raise HTTPException(status_code=400, detail="File too small.")
+
+    if not beats_r2.r2_capabilities()["r2_direct"]:
+        raise HTTPException(status_code=503, detail="Avatar uploads require R2 configuration.")
+
+    # Delete old avatar if exists
+    if user.avatar_url:
+        await asyncio.to_thread(avatar_r2.delete_avatar_from_r2, user.avatar_url)
+
+    url = await asyncio.to_thread(avatar_r2.upload_avatar_to_r2, user.id, data, ct)
+    user.avatar_url = url
+    db.commit()
+    invalidate_user_cache(user.id)
+    return {"ok": True, "avatar_url": url}
+
+
+# ---- Static / SPA serving ----
+
 if _DATASET_ROOT.is_dir():
     app.mount(
         "/media/dataset",
@@ -829,6 +1025,11 @@ if FRONTEND_ROOT.is_dir():
 
     @app.get("/index.html")
     async def _serve_index_named() -> HTMLResponse:
+        return _index_html_response()
+
+    @app.get("/@{username:path}")
+    async def _serve_profile_page(username: str) -> HTMLResponse:
+        """SPA catch-all: serve index.html for /@username so frontend JS can route it."""
         return _index_html_response()
 
     app.mount("/", StaticFiles(directory=str(FRONTEND_ROOT), html=True), name="site")

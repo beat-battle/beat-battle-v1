@@ -76,9 +76,17 @@ export async function registerUser(username, password) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(
-      data.detail || data.message || res.statusText || "Register failed",
-    );
+    const detail = data.detail;
+    let errMsg = "Register failed";
+    if (typeof detail === "string") {
+      errMsg = detail;
+    } else if (Array.isArray(detail) && detail[0]) {
+      const d = detail[0];
+      const field = d.loc?.[d.loc.length - 1];
+      const label = field ? field.charAt(0).toUpperCase() + field.slice(1) : "";
+      errMsg = label ? `${label} ${d.msg?.replace(/^String /i, "")}` : (d.msg || errMsg);
+    }
+    throw new Error(errMsg);
   }
   return data;
 }

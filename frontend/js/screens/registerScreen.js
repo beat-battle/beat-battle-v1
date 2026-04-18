@@ -61,9 +61,11 @@ export function mountRegisterScreen(root, ctx) {
       await registerUser(u, p);
       ctx.navigate(mountLoginScreen);
     } catch (e) {
-      if (err)
-        err.textContent =
-          e instanceof Error ? e.message : "Registration failed.";
+      if (err) {
+        const msg = typeof e === "string" ? e
+          : e?.message || e?.detail || "Registration failed.";
+        err.textContent = typeof msg === "string" ? msg : String(msg);
+      }
     }
   });
 

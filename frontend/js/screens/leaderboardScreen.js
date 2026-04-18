@@ -54,13 +54,26 @@ export function mountLeaderboardScreen(root, ctx) {
           (r, i) => `
         <div class="lb-row">
           <span>${i + 1}</span>
-          <span class="lb-player name-with-rank">${rankBadgeHtml(r.rank)}${supporterDisplayNameInnerHtml(r.username)}</span>
+          <span class="lb-player name-with-rank lb-player-link" data-username="${escapeHtml(r.username)}" style="cursor:pointer">${rankBadgeHtml(r.rank)}${supporterDisplayNameInnerHtml(r.username)}</span>
           <span>${escapeHtml(String(r.wins))}</span>
         </div>`,
         )
         .join("");
       if (tableWrap)
         tableWrap.innerHTML = `<div class="leaderboard-table">${head}${body}</div>`;
+
+      // Make player names clickable → profile
+      tableWrap?.querySelectorAll(".lb-player-link").forEach((el) => {
+        el.addEventListener("click", () => {
+          const u = el.dataset.username;
+          if (!u) return;
+          playSfxMinor();
+          history.pushState({ profile: u }, "", `/@${u}`);
+          import("./profileScreen.js").then((m) =>
+            ctx.navigate(m.mountProfileScreen, { profileUsername: u }),
+          );
+        });
+      });
     })
     .catch((e) => {
       if (statusEl)

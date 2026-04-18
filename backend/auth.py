@@ -156,6 +156,20 @@ def increment_wins_for_users(db: Session, user_ids: list[int]) -> None:
     invalidate_user_cache(*seen)
 
 
+def increment_games_played_for_users(db: Session, user_ids: list[int]) -> None:
+    """Bump games_played for every participant in a finished match."""
+    seen: set[int] = set()
+    for uid in user_ids:
+        if uid in seen:
+            continue
+        seen.add(uid)
+        u = db.get(User, uid)
+        if u is not None:
+            u.games_played += 1
+    db.commit()
+    invalidate_user_cache(*seen)
+
+
 def get_current_user(
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
     db: Annotated[Session, Depends(get_db)],

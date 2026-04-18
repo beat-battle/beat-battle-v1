@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
 
@@ -21,8 +21,27 @@ class User(Base):
     )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     wins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    games_played: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    bio: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
+    avatar_url: Mapped[str | None] = mapped_column(
+        String(512), nullable=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    # Profile comments received on this user's profile
+    profile_comments_received: Mapped[list["ProfileComment"]] = relationship(
+        "ProfileComment",
+        foreign_keys="ProfileComment.profile_id",
+        back_populates="profile",
+        cascade="all, delete-orphan",
+    )
+    # Profile comments this user has written
+    profile_comments_written: Mapped[list["ProfileComment"]] = relationship(
+        "ProfileComment",
+        foreign_keys="ProfileComment.author_id",
+        back_populates="author",
     )
 
 
@@ -46,4 +65,29 @@ class Supporter(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+class ProfileComment(Base):
+    """Comments left on a user's public profile."""
+
+    __tablename__ = "profile_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    profile_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    author_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    profile: Mapped["User"] = relationship(
+        "User", foreign_keys=[profile_id], back_populates="profile_comments_received"
+    )
+    author: Mapped["User"] = relationship(
+        "User", foreign_keys=[author_id], back_populates="profile_comments_written"
     )
