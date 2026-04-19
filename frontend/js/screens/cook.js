@@ -52,6 +52,7 @@ import {
 import { mountUploadScreen } from "./upload.js";
 import { mountVotingSlideshowScreen } from "./votingSlideshow.js";
 import { mountResultsScreen } from "./results.js";
+import { getVolume } from "../volume.js";
 
 function base64ToAudioSrc(b64) {
   return "data:audio/ogg;base64," + b64;
@@ -508,6 +509,7 @@ function setupCookUI(root, ctx, sounds, phaseOpts) {
     const audio = document.createElement("audio");
     audio.id = `mp-audio-${key}`;
     audio.preload = "auto";
+    audio.volume = getVolume();
     bindWaveformPlayback(key, waveWrap, audio);
     card.append(head, waveWrap, audio);
     return card;

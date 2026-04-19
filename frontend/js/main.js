@@ -20,6 +20,7 @@ import { initCornerSocialMenu } from "./cornerSocialMenu.js";
 import { initCreditsCornerControl } from "./creditsOverlay.js";
 import { initDevStatsPanel, recordPageVisit } from "./devStatsPanel.js";
 import { initSupportersClient } from "./supporters.js";
+import { initVolumeWidget } from "./volume.js";
 
 function boot() {
   initSupportersClient();
@@ -28,6 +29,8 @@ function boot() {
   const cornerMenu = document.querySelector(".corner-social-menu");
   if (cornerMenu instanceof HTMLElement) initCornerSocialMenu(cornerMenu);
   const creditsBtn = document.getElementById("credits-corner-btn");
+  const volWidget = document.getElementById("vol-widget");
+  if (volWidget instanceof HTMLElement) initVolumeWidget(volWidget);
   window.addEventListener("error", (ev) => {
     const fn = ev.filename || "";
     if (!fn || fn.includes("extension://") || fn.includes("moz-extension://"))

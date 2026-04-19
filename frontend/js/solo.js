@@ -17,6 +17,7 @@ import { kitSlotDisplayLabel, mountKitLayoutShell } from "./kitGridLayout.js";
 import { transitionPanelHeight } from "./panelHeightTransition.js";
 import { playSfxMajor, playSfxMinor, playSfxOn } from "./sfx.js";
 import { runSynthReveal } from "./synthReveal.js";
+import { getVolume } from "./volume.js";
 
 const CHILI_SRC = new URL("../../imgs/chili.png", import.meta.url).href;
 
@@ -258,6 +259,7 @@ export function mountSoloScreen(root, ctx) {
     const audio = document.createElement("audio");
     audio.id = `audio-${key}`;
     audio.preload = "auto";
+    audio.volume = getVolume();
 
     bindWaveformPlayback(key, waveWrap, audio);
 
