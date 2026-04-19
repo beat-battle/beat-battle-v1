@@ -189,6 +189,12 @@ _ALLOWED_DEV_STATS_USERS = frozenset({"psyalysis", "polystalgia"})
 
 _COMMENT_LIMIT = SlidingWindowRateLimiter(max_events=3, window_s=30.0)
 _SHOP_PURCHASE_LIMIT = SlidingWindowRateLimiter(max_events=20, window_s=60.0)
+_UPLOAD_TRANSCODE_MAX_CONCURRENCY = _env_int(
+    "COOKUP_UPLOAD_TRANSCODE_CONCURRENCY", 1, minimum=1
+)
+_UPLOAD_TRANSCODE_WAIT_S = _env_float(
+    "COOKUP_UPLOAD_TRANSCODE_WAIT_S", 15.0, minimum=1.0
+)
 
 
 def _shop_purchases_enabled() -> bool:
@@ -283,6 +289,9 @@ async def lifespan(app: FastAPI):
     UPLOADS_ROOT.mkdir(parents=True, exist_ok=True)
     manager = LobbyManager(UPLOADS_ROOT)
     app.state.manager = manager
+    app.state.upload_transcode_sem = asyncio.Semaphore(
+        _UPLOAD_TRANSCODE_MAX_CONCURRENCY
+    )
 
     async def cleanup_loop() -> None:
         while True:
@@ -386,6 +395,39 @@ class StaticCacheControlMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 
+class HealthcheckFastPathMiddleware:
+    """Answer Render health checks without touching FastAPI routing or DB work."""
+
+    def __init__(self, app):
+        self.app = app
+        self._body = b'{"status":"ok"}'
+
+    async def __call__(self, scope, receive, send):
+        if (
+            scope["type"] == "http"
+            and scope.get("path") == "/health"
+            and scope.get("method") in ("GET", "HEAD")
+        ):
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"cache-control", b"no-store"),
+                    ],
+                }
+            )
+            await send(
+                {
+                    "type": "http.response.body",
+                    "body": b"" if scope.get("method") == "HEAD" else self._body,
+                }
+            )
+            return
+        await self.app(scope, receive, send)
+
+
 app.add_middleware(StaticCacheControlMiddleware)
 app.add_middleware(
     IPRateLimitMiddleware,
@@ -393,6 +435,7 @@ app.add_middleware(
     window_s=_env_float("COOKUP_HTTP_RATE_LIMIT_WINDOW_S", 10.0, minimum=1.0),
     trust_proxy_headers=_env_bool("COOKUP_TRUST_PROXY_HEADERS", False),
 )
+app.add_middleware(HealthcheckFastPathMiddleware)
 
 _LOGIN_LIMIT = SlidingWindowRateLimiter(max_events=10, window_s=60.0)
 _REGISTER_LIMIT = SlidingWindowRateLimiter(max_events=5, window_s=60.0)
@@ -925,6 +968,7 @@ async def upload_beat(
     user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
     manager: LobbyManager = app.state.manager
+    upload_transcode_sem: asyncio.Semaphore = app.state.upload_transcode_sem
     if not manager.verify_player_belongs_to_user(lobby_id, player_id, user.id):
         raise HTTPException(status_code=403, detail="Not in this lobby.")
     lobby = manager.lobbies.get(lobby_id)
@@ -968,7 +1012,19 @@ async def upload_beat(
                 status_code=400, detail="File content does not match extension."
             )
 
+        acquired = False
         try:
+            try:
+                await asyncio.wait_for(
+                    upload_transcode_sem.acquire(), timeout=_UPLOAD_TRANSCODE_WAIT_S
+                )
+                acquired = True
+            except TimeoutError as e:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Upload queue is full right now. Please try again in a moment.",
+                    headers={"Retry-After": "10"},
+                ) from e
             await asyncio.to_thread(
                 trim_beat_upload_to_ogg,
                 part,
@@ -993,6 +1049,9 @@ async def upload_beat(
             raise HTTPException(
                 status_code=400, detail="Could not process audio file."
             ) from e
+        finally:
+            if acquired:
+                upload_transcode_sem.release()
     except HTTPException:
         part.unlink(missing_ok=True)
         dest.unlink(missing_ok=True)
