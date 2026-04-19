@@ -86,6 +86,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 UPLOADS_ROOT = _PROJECT_ROOT / "uploads"
 FRONTEND_ROOT = _PROJECT_ROOT / "frontend"
 _DATASET_ROOT = _PROJECT_ROOT / "dataset"
+_CANONICAL_HOST = os.environ.get("COOKUP_CANONICAL_HOST", "beat-battle.net").strip().lower()
 
 
 def _env_float(name: str, default: float, *, minimum: float | None = None) -> float:
@@ -239,11 +240,12 @@ _visit_counter_pending: int = 0
 _visit_counter_lock = asyncio.Lock()
 _VISIT_FLUSH_INTERVAL_S = 30.0
 _VISIT_FLUSH_THRESHOLD = 50
+_visit_total_known: int = 0
 
 
 async def _flush_visits() -> None:
     """Move pending in-memory count into the DB in one write."""
-    global _visit_counter_pending
+    global _visit_counter_pending, _visit_total_known
     async with _visit_counter_lock:
         if _visit_counter_pending <= 0:
             return
@@ -258,6 +260,7 @@ async def _flush_visits() -> None:
             db.flush()
         row.total_visits += batch
         db.commit()
+        _visit_total_known = int(row.total_visits)
     finally:
         db.close()
 
@@ -270,12 +273,8 @@ async def _increment_visit_batched() -> int:
         pending = _visit_counter_pending
     if pending >= _VISIT_FLUSH_THRESHOLD:
         await _flush_visits()
-    # Return approximate total (unflushed + DB).
-    db = next(get_db())
-    try:
-        return _get_total_visits(db) + pending
-    finally:
-        db.close()
+    # Return an approximate total without a DB read on every page boot.
+    return _visit_total_known + pending
 
 
 def _get_total_visits(db: Session) -> int:
@@ -285,6 +284,7 @@ def _get_total_visits(db: Session) -> int:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _visit_total_known
     init_db()
     UPLOADS_ROOT.mkdir(parents=True, exist_ok=True)
     manager = LobbyManager(UPLOADS_ROOT)
@@ -292,6 +292,11 @@ async def lifespan(app: FastAPI):
     app.state.upload_transcode_sem = asyncio.Semaphore(
         _UPLOAD_TRANSCODE_MAX_CONCURRENCY
     )
+    db = next(get_db())
+    try:
+        _visit_total_known = _get_total_visits(db)
+    finally:
+        db.close()
 
     async def cleanup_loop() -> None:
         while True:
@@ -395,6 +400,41 @@ class StaticCacheControlMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 
+class CanonicalHostMiddleware:
+    """Redirect Render's public hostname to the canonical site host."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = {k.lower(): v for k, v in scope.get("headers", [])}
+        raw_host = headers.get(b"host", b"").decode("latin-1").strip().lower()
+        if raw_host == "beatbattle.onrender.com" and _CANONICAL_HOST:
+            path = scope.get("path", "/") or "/"
+            qs = scope.get("query_string", b"")
+            target = f"https://{_CANONICAL_HOST}{path}"
+            if qs:
+                target = f"{target}?{qs.decode('latin-1')}"
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 307,
+                    "headers": [
+                        (b"location", target.encode("latin-1")),
+                        (b"cache-control", b"no-store"),
+                    ],
+                }
+            )
+            await send({"type": "http.response.body", "body": b""})
+            return
+
+        await self.app(scope, receive, send)
+
+
 class HealthcheckFastPathMiddleware:
     """Answer Render health checks without touching FastAPI routing or DB work."""
 
@@ -436,6 +476,7 @@ app.add_middleware(
     trust_proxy_headers=_env_bool("COOKUP_TRUST_PROXY_HEADERS", False),
 )
 app.add_middleware(HealthcheckFastPathMiddleware)
+app.add_middleware(CanonicalHostMiddleware)
 
 _LOGIN_LIMIT = SlidingWindowRateLimiter(max_events=10, window_s=60.0)
 _REGISTER_LIMIT = SlidingWindowRateLimiter(max_events=5, window_s=60.0)
@@ -518,10 +559,16 @@ def get_supporters(db: Session = Depends(get_db)) -> dict[str, Any]:
         exp, cached = _supporters_cache
         if now < exp:
             return cached
-    rows = db.query(Supporter).order_by(Supporter.name_key).all()
-    result = {"names": [r.name_key for r in rows]}
-    _supporters_cache = (now + _SUPPORTERS_TTL_S, result)
-    return result
+    try:
+        rows = db.query(Supporter).order_by(Supporter.name_key).all()
+        result = {"names": [r.name_key for r in rows]}
+        _supporters_cache = (now + _SUPPORTERS_TTL_S, result)
+        return result
+    except Exception:
+        if _supporters_cache is not None:
+            _, cached = _supporters_cache
+            return cached
+        return {"names": []}
 
 
 class SupporterAddBody(BaseModel):
@@ -692,7 +739,7 @@ _leaderboard_cache: tuple[float, list[LeaderboardEntry]] | None = None
 _LEADERBOARD_TTL_S = 30.0
 
 _supporters_cache: tuple[float, dict[str, Any]] | None = None
-_SUPPORTERS_TTL_S = 60.0
+_SUPPORTERS_TTL_S = _env_float("COOKUP_SUPPORTERS_CACHE_TTL_S", 600.0, minimum=30.0)
 
 _lobbies_cache: tuple[float, list[dict[str, Any]]] | None = None
 _LOBBIES_TTL_S = _env_float("COOKUP_LOBBIES_CACHE_TTL_S", 5.0, minimum=1.0)
@@ -1092,8 +1139,13 @@ async def get_beat(
         and lobby is not None
         and owner_id in lobby.uploaded
     ):
+        final_url = await asyncio.to_thread(
+            beats_r2.public_final_url, lobby_id, owner_id
+        )
+        if not final_url:
+            raise HTTPException(status_code=404, detail="Beat not found.")
         return RedirectResponse(
-            url=beats_r2.public_final_url(lobby_id, owner_id),
+            url=final_url,
             status_code=302,
         )
     raise HTTPException(status_code=404, detail="Beat not found.")

@@ -15,6 +15,11 @@ from botocore.exceptions import ClientError
 ALLOWED_BEAT_CONTENT_TYPES = frozenset({"audio/mpeg", "audio/wav"})
 MAX_BEAT_BYTES = 30 * 1024 * 1024
 PRESIGN_EXPIRES_S = 900
+_BEAT_EXT_BY_CONTENT_TYPE = {
+    "audio/mpeg": "mp3",
+    "audio/wav": "wav",
+    "audio/ogg": "ogg",
+}
 
 
 def _truthy(name: str, default: bool) -> bool:
@@ -74,8 +79,17 @@ def staging_key(lobby_id: str, player_id: str, upload_id: str) -> str:
     return f"beats/{lobby_id}/staging/{player_id}/{upload_id}/source"
 
 
-def final_key(lobby_id: str, player_id: str) -> str:
-    return f"beats/{lobby_id}/final/{player_id}.ogg"
+def final_prefix(lobby_id: str, player_id: str) -> str:
+    return f"beats/{lobby_id}/final/{player_id}."
+
+
+def beat_extension_for_content_type(content_type: str) -> str:
+    ct = str(content_type or "").strip().lower()
+    return _BEAT_EXT_BY_CONTENT_TYPE.get(ct, "ogg")
+
+
+def final_key(lobby_id: str, player_id: str, content_type: str) -> str:
+    return f"{final_prefix(lobby_id, player_id)}{beat_extension_for_content_type(content_type)}"
 
 
 def normalize_etag(raw: str | None) -> str:
@@ -125,10 +139,10 @@ def head_staging_object(lobby_id: str, player_id: str, upload_id: str) -> dict[s
 def copy_staging_to_final(
     lobby_id: str, player_id: str, upload_id: str, content_type: str
 ) -> None:
-    """Stub worker: same bytes at final key so GET redirect + slideshow work without ffmpeg."""
+    """Stub worker: same bytes at a correctly typed final key so browser playback works."""
     bucket = os.environ["R2_BUCKET_NAME"].strip()
     src = staging_key(lobby_id, player_id, upload_id)
-    dst = final_key(lobby_id, player_id)
+    dst = final_key(lobby_id, player_id, content_type)
     client = _s3()
     client.copy_object(
         Bucket=bucket,
@@ -139,9 +153,35 @@ def copy_staging_to_final(
     )
 
 
-def public_final_url(lobby_id: str, player_id: str) -> str:
+def resolve_final_key(lobby_id: str, player_id: str) -> str | None:
+    bucket = os.environ["R2_BUCKET_NAME"].strip()
+    prefix = final_prefix(lobby_id, player_id)
+    client = _s3()
+    page = client.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=10)
+    keys = [
+        obj.get("Key")
+        for obj in page.get("Contents") or ()
+        if isinstance(obj.get("Key"), str)
+    ]
+    if not keys:
+        return None
+    preferred = (
+        f"{prefix}ogg",
+        f"{prefix}mp3",
+        f"{prefix}wav",
+    )
+    for candidate in preferred:
+        if candidate in keys:
+            return candidate
+    return sorted(keys)[0]
+
+
+def public_final_url(lobby_id: str, player_id: str) -> str | None:
     base = os.environ["R2_PUBLIC_BASE_URL"].strip().rstrip("/")
-    return f"{base}/{final_key(lobby_id, player_id)}"
+    key = resolve_final_key(lobby_id, player_id)
+    if not key:
+        return None
+    return f"{base}/{key}"
 
 
 def _r2_safe_lobby_id(lobby_id: str) -> str | None:
@@ -203,7 +243,18 @@ def r2_delete_player_beat_objects(lobby_id: str, player_id: str) -> None:
         return
     bucket = os.environ["R2_BUCKET_NAME"].strip()
     client = _s3()
-    keys: list[str] = [final_key(lid, pid)]
+    keys: list[str] = []
+    final_prefix_value = final_prefix(lid, pid)
+    try:
+        for page in client.get_paginator("list_objects_v2").paginate(
+            Bucket=bucket, Prefix=final_prefix_value
+        ):
+            for obj in page.get("Contents") or ():
+                k = obj.get("Key")
+                if isinstance(k, str) and k not in keys:
+                    keys.append(k)
+    except ClientError:
+        pass
     staging_prefix = f"beats/{lid}/staging/{pid}/"
     try:
         for page in client.get_paginator("list_objects_v2").paginate(
