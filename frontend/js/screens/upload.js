@@ -42,16 +42,40 @@ import { mountVotingSlideshowScreen } from "./votingSlideshow.js";
 const UPLOAD_WINDOW_SEC = 120;
 const MAX_BEAT_BYTES = 30 * 1024 * 1024;
 
+const BEAT_FILE_RE = /\.(mp3|ogg)$/i;
+const UNSUPPORTED_BEAT_TYPE =
+  "Only MP3 or OGG files are supported for your beat.";
+
+/**
+ * @param {File} file
+ * @returns {boolean}
+ */
+function isSupportedBeatFile(file) {
+  const n = (file.name || "").trim();
+  if (BEAT_FILE_RE.test(n)) return true;
+  const t = (file.type || "").trim().toLowerCase();
+  if (t === "audio/mpeg" || t === "audio/ogg" || t === "application/ogg")
+    return true;
+  return false;
+}
+
 /**
  * @param {File} file
  * @returns {string}
  */
 function beatContentTypeForR2(file) {
-  const t = (file.type || "").trim().toLowerCase();
-  if (t === "audio/mpeg") return t;
   const n = (file.name || "").toLowerCase();
-  if (n.endsWith(".mp3")) return "audio/mpeg";
-  throw new Error("Only MP3 uploads are allowed right now.");
+  if (n.endsWith(".ogg")) {
+    const t = (file.type || "").trim().toLowerCase();
+    if (t === "application/ogg" || t === "audio/ogg") return "audio/ogg";
+    return "audio/ogg";
+  }
+  if (n.endsWith(".mp3")) {
+    const t = (file.type || "").trim().toLowerCase();
+    if (t === "audio/mpeg" || t === "audio/mp3") return "audio/mpeg";
+    return "audio/mpeg";
+  }
+  throw new Error(UNSUPPORTED_BEAT_TYPE);
 }
 
 /**
@@ -75,8 +99,8 @@ async function uploadErrorMessage(res) {
   if (typeof detail === "string" && detail.trim()) return detail.trim();
   if (Array.isArray(detail) && detail[0]) {
     const msg = String(detail[0]?.msg || "").trim();
-    if (msg.includes("content_type must be audio/mpeg")) {
-      return "Only MP3 uploads are allowed right now.";
+    if (msg.includes("content_type must be")) {
+      return UNSUPPORTED_BEAT_TYPE;
     }
     if (msg) return msg;
   }
@@ -130,11 +154,11 @@ export function mountUploadScreen(root, ctx) {
         <div class="mp-panel-head-timer">${phaseTimerRowHtml("mp-upload-phase")}</div>
         <div class="mp-panel-head-roster">${progressHintSlotHtml("mp-corner-upload")}</div>
       </div>
-      <p class="arcade-hint">MP3 or WAV · max 30MB · up to 45s</p>
+      <p class="arcade-hint">MP3 or OGG · max 30MB · up to 45s</p>
       <p class="arcade-hint upload-hint-muted">No upload? You can still listen and vote!</p>
       <p class="arcade-hint upload-hint-muted hidden" id="upload-on-server">Already uploaded</p>
       <form id="upload-form" class="upload-form">
-        <input type="file" id="beat-file" accept=".mp3,audio/mpeg" required />
+        <input type="file" id="beat-file" accept=".mp3,.ogg,audio/mpeg,audio/ogg" required />
         <button type="submit" class="arcade-btn arcade-btn-primary" id="upload-submit">Upload</button>
       </form>
       <p class="arcade-status" id="upload-status"></p>
@@ -144,7 +168,7 @@ export function mountUploadScreen(root, ctx) {
   const form = root.querySelector("#upload-form");
   const statusEl = root.querySelector("#upload-status");
   const uploadHintEl = root.querySelector(".screen.upload > .arcade-hint");
-  if (uploadHintEl) uploadHintEl.textContent = "MP3 ONLY - max 30MB - up to 45s";
+  if (uploadHintEl) uploadHintEl.textContent = "MP3 or OGG — max 30MB — up to 45s";
   const uploadTotalSec = UPLOAD_WINDOW_SEC;
 
   /** @type {ReturnType<typeof normalizeLobbyLike>} */
@@ -265,11 +289,34 @@ export function mountUploadScreen(root, ctx) {
     () => ctx.mpWs?.readyState !== WebSocket.OPEN,
   );
 
+  const beatFileInput = root.querySelector("#beat-file");
+  if (beatFileInput instanceof HTMLInputElement) {
+    beatFileInput.addEventListener("change", () => {
+      const f = beatFileInput.files?.[0];
+      if (!f || isSupportedBeatFile(f)) return;
+      beatFileInput.value = "";
+      if (statusEl) statusEl.textContent = "";
+      showAppError({
+        message: UNSUPPORTED_BEAT_TYPE,
+        hint: "Choose a file ending in .mp3 or .ogg.",
+        errorCode: "UPLOAD_BAD_TYPE",
+      });
+    });
+  }
+
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = root.querySelector("#beat-file");
     const file = input?.files?.[0];
     if (!file) return;
+    if (!isSupportedBeatFile(file)) {
+      showAppError({
+        message: UNSUPPORTED_BEAT_TYPE,
+        hint: "Choose a file ending in .mp3 or .ogg.",
+        errorCode: "UPLOAD_BAD_TYPE",
+      });
+      return;
+    }
     if (file.size > MAX_BEAT_BYTES) {
       const um = "File too large (max 30MB).";
       if (statusEl) statusEl.textContent = um;
@@ -353,15 +400,16 @@ export function mountUploadScreen(root, ctx) {
       syncSelfUploadUi();
     } catch (err) {
       const um = err instanceof Error ? err.message : "Upload failed";
-      if (statusEl) {
-        statusEl.textContent = um.includes("Only MP3")
-          ? "Only MP3 uploads are allowed right now."
-          : um;
-      }
+      const badType =
+        um.includes(UNSUPPORTED_BEAT_TYPE) ||
+        um.includes("Only .mp3") ||
+        um.includes(".mp3 or .ogg") ||
+        um.includes("content_type must be");
+      if (statusEl) statusEl.textContent = badType ? UNSUPPORTED_BEAT_TYPE : um;
       showAppError({
-        message: `Upload failed: ${um}`,
-        hint: um.includes("Only MP3")
-          ? "WAV uploads are temporarily disabled. Export as MP3 and try again."
+        message: badType ? UNSUPPORTED_BEAT_TYPE : `Upload failed: ${um}`,
+        hint: badType
+          ? "Choose a file ending in .mp3 or .ogg."
           : "Check your connection and file size, then try again.",
         errorCode: "UPLOAD_FETCH",
       });

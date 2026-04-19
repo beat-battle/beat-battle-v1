@@ -1006,6 +1006,8 @@ async def beat_upload_complete(
 
 
 def _sniff_audio(buf: bytes) -> str | None:
+    if len(buf) >= 4 and buf[:4] == b"OggS":
+        return ".ogg"
     if len(buf) >= 12 and buf[:4] == b"RIFF" and buf[8:12] == b"WAVE":
         return ".wav"
     if len(buf) >= 3 and buf[:3] == b"ID3":
@@ -1044,8 +1046,8 @@ async def upload_beat(
         raise HTTPException(status_code=400, detail="Upload phase is not active.")
 
     suffix = Path(file.filename or "").suffix.lower()
-    if suffix != ".mp3":
-        raise HTTPException(status_code=400, detail="Only .mp3 allowed right now.")
+    if suffix not in (".mp3", ".ogg"):
+        raise HTTPException(status_code=400, detail="Only .mp3 or .ogg allowed.")
 
     dest_dir = UPLOADS_ROOT / lobby_id
     dest_dir.mkdir(parents=True, exist_ok=True)

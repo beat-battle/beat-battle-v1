@@ -24,7 +24,7 @@ def trim_beat_upload_to_ogg(
     max_sec: float | None = None,
 ) -> None:
     """
-    Decode ``src`` (uploaded ``.mp3`` or ``.wav``), keep at most ``max_sec`` seconds of audio,
+    Decode ``src`` (uploaded ``.mp3``, ``.wav``, or ``.ogg``), keep at most ``max_sec`` seconds of audio,
     encode as Vorbis, write ``dest_ogg``. Removes ``src`` when done (success or failure).
 
     ``dest_ogg`` must use a ``.ogg`` suffix.
@@ -37,7 +37,7 @@ def trim_beat_upload_to_ogg(
         raise ValueError("dest_ogg must end with .ogg")
 
     suf = source_suffix.lower()
-    if suf not in (".mp3", ".wav"):
+    if suf not in (".mp3", ".wav", ".ogg"):
         raise ValueError(f"Unsupported source suffix: {source_suffix}")
 
     ffmpeg = shutil.which("ffmpeg")

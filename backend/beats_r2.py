@@ -12,7 +12,7 @@ from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 
 # ADR: staging key layout
-ALLOWED_BEAT_CONTENT_TYPES = frozenset({"audio/mpeg"})
+ALLOWED_BEAT_CONTENT_TYPES = frozenset({"audio/mpeg", "audio/ogg"})
 MAX_BEAT_BYTES = 30 * 1024 * 1024
 PRESIGN_EXPIRES_S = 900
 _BEAT_EXT_BY_CONTENT_TYPE = {
