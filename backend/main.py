@@ -1025,8 +1025,8 @@ async def upload_beat(
         raise HTTPException(status_code=400, detail="Upload phase is not active.")
 
     suffix = Path(file.filename or "").suffix.lower()
-    if suffix not in (".mp3", ".wav"):
-        raise HTTPException(status_code=400, detail="Only .mp3 or .wav allowed.")
+    if suffix != ".mp3":
+        raise HTTPException(status_code=400, detail="Only .mp3 allowed right now.")
 
     dest_dir = UPLOADS_ROOT / lobby_id
     dest_dir.mkdir(parents=True, exist_ok=True)

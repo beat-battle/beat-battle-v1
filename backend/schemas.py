@@ -120,8 +120,8 @@ class BeatUploadPresignRequest(BaseModel):
     @classmethod
     def content_type_allowlist(cls, v: str) -> str:
         s = v.strip()
-        if s not in ("audio/mpeg", "audio/wav"):
-            raise ValueError("content_type must be audio/mpeg or audio/wav")
+        if s != "audio/mpeg":
+            raise ValueError("content_type must be audio/mpeg")
         return s
 
 

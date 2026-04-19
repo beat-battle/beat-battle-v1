@@ -48,11 +48,10 @@ const MAX_BEAT_BYTES = 30 * 1024 * 1024;
  */
 function beatContentTypeForR2(file) {
   const t = (file.type || "").trim().toLowerCase();
-  if (t === "audio/mpeg" || t === "audio/wav") return t;
+  if (t === "audio/mpeg") return t;
   const n = (file.name || "").toLowerCase();
   if (n.endsWith(".mp3")) return "audio/mpeg";
-  if (n.endsWith(".wav")) return "audio/wav";
-  throw new Error("Only MP3 or WAV (audio/mpeg or audio/wav).");
+  throw new Error("Only MP3 uploads are allowed right now.");
 }
 
 export function mountUploadScreen(root, ctx) {
@@ -106,7 +105,7 @@ export function mountUploadScreen(root, ctx) {
       <p class="arcade-hint upload-hint-muted">No upload? You can still listen and vote!</p>
       <p class="arcade-hint upload-hint-muted hidden" id="upload-on-server">Already uploaded</p>
       <form id="upload-form" class="upload-form">
-        <input type="file" id="beat-file" accept=".mp3,.wav,audio/mpeg,audio/wav" required />
+        <input type="file" id="beat-file" accept=".mp3,audio/mpeg" required />
         <button type="submit" class="arcade-btn arcade-btn-primary" id="upload-submit">Upload</button>
       </form>
       <p class="arcade-status" id="upload-status"></p>
@@ -115,6 +114,8 @@ export function mountUploadScreen(root, ctx) {
 
   const form = root.querySelector("#upload-form");
   const statusEl = root.querySelector("#upload-status");
+  const uploadHintEl = root.querySelector(".arcade-hint");
+  if (uploadHintEl) uploadHintEl.textContent = "MP3 only - max 30MB - up to 45s";
   const uploadTotalSec = UPLOAD_WINDOW_SEC;
 
   /** @type {ReturnType<typeof normalizeLobbyLike>} */
