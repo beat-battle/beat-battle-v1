@@ -95,6 +95,7 @@ def init_db() -> None:
     _add_column_if_missing("users", "avatar_url", "VARCHAR(512)")
     _add_column_if_missing("users", "profile_icon_key", "VARCHAR(32)")
     _add_column_if_missing("users", "created_at", "TIMESTAMP DEFAULT NOW()")
+    _add_column_if_missing("users", "password_version", "INTEGER NOT NULL DEFAULT 0")
 
     if _IS_SQLITE:
         _add_column_if_missing("site_stats", "pause_new_matches", "INTEGER NOT NULL DEFAULT 0")

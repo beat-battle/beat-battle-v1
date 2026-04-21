@@ -14,8 +14,10 @@ For nginx, raise ``proxy_read_timeout`` / ``proxy_send_timeout`` above the ping 
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import random
+import secrets
 import re
 import shutil
 import tempfile
@@ -23,7 +25,7 @@ import time as _time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import unquote
-from typing import Any
+from typing import Annotated, Any
 from fastapi import (
     Depends,
     FastAPI,
@@ -49,6 +51,7 @@ from .auth import (
     invalidate_user_cache,
     login_user,
     register_user,
+    reset_user_password_for_username,
 )
 from . import beats_r2
 from .http_rate_limit import IPRateLimitMiddleware
@@ -66,6 +69,8 @@ from .multiplayer.ws import router as ws_router
 from .multiplayer.ws_rate_limit import SlidingWindowRateLimiter
 from .rank import rank_for_wins, rank_index_for_wins, rank_public_dict
 from .schemas import (
+    AdminPasswordResetRequest,
+    AdminPasswordResetResponse,
     BeatUploadCapabilitiesResponse,
     BeatUploadCompleteRequest,
     BeatUploadCompleteResponse,
@@ -479,6 +484,25 @@ app.add_middleware(CanonicalHostMiddleware)
 
 _LOGIN_LIMIT = SlidingWindowRateLimiter(max_events=10, window_s=60.0)
 _REGISTER_LIMIT = SlidingWindowRateLimiter(max_events=5, window_s=60.0)
+_ADMIN_RESET_LIMIT = SlidingWindowRateLimiter(max_events=5, window_s=3600.0)
+
+_admin_log = logging.getLogger("cookup.admin")
+_admin_bearer = HTTPBearer(auto_error=False)
+
+
+def _require_admin_api_key(
+    creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_admin_bearer)],
+) -> None:
+    key = os.environ.get("COOKUP_ADMIN_API_KEY", "").strip()
+    if not key:
+        raise HTTPException(
+            status_code=503,
+            detail="Admin password reset is not configured (set COOKUP_ADMIN_API_KEY).",
+        )
+    if creds is None or creds.scheme.lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Admin authentication required.")
+    if not secrets.compare_digest(creds.credentials, key):
+        raise HTTPException(status_code=403, detail="Invalid admin credentials.")
 
 app.include_router(ws_router)
 
@@ -644,6 +668,33 @@ def post_login(
     return login_user(db, body)
 
 
+@app.post("/admin/reset-password", response_model=AdminPasswordResetResponse)
+def post_admin_reset_password(
+    request: Request,
+    body: AdminPasswordResetRequest,
+    db: Session = Depends(get_db),
+    _admin: None = Depends(_require_admin_api_key),
+) -> AdminPasswordResetResponse:
+    """Manual password reset: ``Authorization: Bearer <COOKUP_ADMIN_API_KEY>``."""
+    ip = request.client.host if request.client else "unknown"
+    if not _ADMIN_RESET_LIMIT.check(f"admin_reset:{ip}"):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many admin reset attempts. Try again later.",
+            headers={"Retry-After": "3600"},
+        )
+    user = reset_user_password_for_username(
+        db, username=body.username, new_password=body.new_password
+    )
+    _admin_log.warning(
+        "admin_password_reset user_id=%s username=%s ip=%s",
+        user.id,
+        user.username,
+        ip,
+    )
+    return AdminPasswordResetResponse(user_id=user.id, username=user.username)
+
+
 @app.post("/api/ws-ticket")
 def post_ws_ticket(user: User = Depends(get_current_user)) -> dict[str, str]:
     """Issue a short-lived, single-use ticket for WebSocket auth.
@@ -652,7 +703,9 @@ def post_ws_ticket(user: User = Depends(get_current_user)) -> dict[str, str]:
     ticket as ``?token=...`` instead of the long-lived JWT.  Even if the URL
     leaks in server/proxy logs the ticket is already expired (30 s) and
     single-use."""
-    ticket = create_ws_ticket(user.id, user.username)
+    ticket = create_ws_ticket(
+        user.id, user.username, int(user.password_version or 0)
+    )
     return {"ticket": ticket}
 
 

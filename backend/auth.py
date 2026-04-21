@@ -16,7 +16,7 @@ import bcrypt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .database import SessionLocal, get_db
@@ -65,11 +65,12 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(_password_key_bytes(password), bcrypt.gensalt()).decode("ascii")
 
 
-def create_access_token(*, user_id: int, username: str) -> str:
+def create_access_token(*, user_id: int, username: str, password_version: int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     payload = {
         "sub": str(user_id),
         "username": username,
+        "pv": int(password_version),
         "exp": expire,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
@@ -77,6 +78,33 @@ def create_access_token(*, user_id: int, username: str) -> str:
 
 def decode_token(token: str) -> dict:
     return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+
+def _password_version_from_payload(payload: dict) -> int:
+    """JWT ``pv`` claim; missing treats as 0 (legacy tokens issued before password resets)."""
+    raw = payload.get("pv")
+    if raw is None:
+        return 0
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return -1
+
+
+def token_password_version_matches(user: User, payload: dict) -> bool:
+    return _password_version_from_payload(payload) == int(user.password_version or 0)
+
+
+def reset_user_password_for_username(db: Session, *, username: str, new_password: str) -> User:
+    """Set a new bcrypt hash, bump ``password_version`` (invalidates JWTs), bust user cache."""
+    user = db.query(User).filter(func.lower(User.username) == username.lower()).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+    user.password_hash = hash_password(new_password)
+    user.password_version = int(user.password_version or 0) + 1
+    db.commit()
+    invalidate_user_cache(user.id)
+    return user
 
 
 def register_user(db: Session, body: RegisterRequest) -> RegisterResponse:
@@ -97,7 +125,9 @@ def login_user(db: Session, body: LoginRequest) -> TokenResponse:
     user = db.query(User).filter(func.lower(User.username) == body.username.lower()).first()
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password.")
-    token = create_access_token(user_id=user.id, username=user.username)
+    token = create_access_token(
+        user_id=user.id, username=user.username, password_version=int(user.password_version or 0)
+    )
     return TokenResponse(token=token, username=user.username)
 
 
@@ -202,14 +232,19 @@ def get_current_user(
         uid = int(payload["sub"])
     except (JWTError, KeyError, ValueError, TypeError):
         raise HTTPException(status_code=401, detail="Invalid or expired token.")
+    pv_db = db.scalar(select(User.password_version).where(User.id == uid))
+    if pv_db is None:
+        raise HTTPException(status_code=401, detail="User not found.")
+    if _password_version_from_payload(payload) != int(pv_db):
+        raise HTTPException(status_code=401, detail="Invalid or expired token.")
     cached = _cached_user_get(uid)
     if cached is not None:
-        return db.merge(cached, load=False)
-
-    user = get_user_by_id(db, uid)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found.")
-    _cached_user_put(user)
+        user = db.merge(cached, load=False)
+    else:
+        user = get_user_by_id(db, uid)
+        if user is None:
+            raise HTTPException(status_code=401, detail="User not found.")
+        _cached_user_put(user)
     return user
 
 
@@ -248,6 +283,8 @@ def try_validate_ws_token(
             return None, "user_not_found"
         if user.username != un:
             return None, "username_mismatch"
+        if not token_password_version_matches(user, payload):
+            return None, "token_stale"
         _cached_user_put(user)
         return (uid, user.username), None
     finally:
@@ -262,13 +299,14 @@ def validate_ws_token(token: str | None) -> tuple[int, str] | None:
     return ok
 
 
-def create_ws_ticket(user_id: int, username: str) -> str:
+def create_ws_ticket(user_id: int, username: str, password_version: int) -> str:
     """Short-lived single-use JWT for ``/ws?token=`` (see ``redeem_ws_ticket``)."""
     jti = secrets.token_urlsafe(24)
     expire = datetime.now(timezone.utc) + timedelta(seconds=_WS_TICKET_TTL_S)
     payload = {
         "sub": str(user_id),
         "username": username,
+        "pv": int(password_version),
         "exp": expire,
         "typ": "ws_ticket",
         "jti": jti,
@@ -316,6 +354,8 @@ def redeem_ws_ticket(token: str) -> tuple[int, str] | None:
     try:
         user = db.get(User, uid)
         if user is None or user.username != un:
+            return None
+        if not token_password_version_matches(user, payload):
             return None
         return uid, un
     finally:

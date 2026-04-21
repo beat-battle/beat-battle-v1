@@ -18,6 +18,9 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_version: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default="0"
+    )
     wins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     games_played: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False, server_default="0"

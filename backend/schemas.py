@@ -51,6 +51,27 @@ class RegisterResponse(BaseModel):
     message: str
 
 
+class AdminPasswordResetRequest(BaseModel):
+    """Manual admin reset (HTTP); gated by ``COOKUP_ADMIN_API_KEY``."""
+
+    username: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def username_strip(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("Username required.")
+        return s
+
+
+class AdminPasswordResetResponse(BaseModel):
+    ok: bool = True
+    user_id: int
+    username: str
+
+
 class RankInfo(BaseModel):
     key: str
     abbrev: str
