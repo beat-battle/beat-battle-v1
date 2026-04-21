@@ -1,5 +1,6 @@
 /**
- * Voting round: each beat plays (capped at 45s), waveform matches what you hear.
+ * Voting round: each beat plays (capped at 45s). Waveform uses a low-cost WaveSurfer
+ * profile (low sampleRate decode, chunky bars, low minPxPerSec) for weaker devices.
  */
 import { authHeadersMultipart } from "../authApi.js";
 import { mountAuthCornerLeave } from "../authCorner.js";
@@ -36,6 +37,7 @@ import { fetchMatchSync, pollMatchSync } from "../mpMatchSync.js";
 import { playSfxMinor } from "../sfx.js";
 import { mountResultsScreen } from "./results.js";
 import { mountVoteSelectionScreen } from "./voteSelection.js";
+import { withTimeoutMs } from "../withTimeoutMs.js";
 
 /** @type {Record<string, string>} */
 const BEAT_REACTION_EMOJI = {
@@ -56,6 +58,18 @@ const BEAT_REACTION_ARIA = {
 };
 
 const CLIP_MAX_SEC = 45;
+
+/** Stuck fetch/blob or decode would otherwise freeze the slideshow. */
+const SLIDE_HANG_GUARD_MS = 90_000;
+
+const SLIDE_FETCH_TIMEOUT_MS = 60_000;
+
+/** Slideshow waveform: cheaper decode (v7 `sampleRate` is display-only) + fewer bars. */
+const SLIDE_WAVEFORM_SAMPLE_RATE = 4000;
+const SLIDE_WAVEFORM_MIN_PX_PER_SEC = 20;
+const SLIDE_WAVEFORM_HEIGHT = 88;
+const SLIDE_WAVEFORM_BAR_WIDTH = 4;
+const SLIDE_WAVEFORM_BAR_GAP = 2;
 
 /** Fallback if server omits `votes_close_at` (matches backend `VOTING_COLLECT_S`). */
 const VOTE_COLLECT_FALLBACK_S = 60;
@@ -372,14 +386,18 @@ export function mountVotingSlideshowScreen(root, ctx) {
     const fullUrl = `${ctx.apiBase}${b.url}?requester=${encodeURIComponent(playerId)}`;
 
     let wsur = null;
-
     /** @type {ReturnType<typeof setInterval> | null} */
     let poll = null;
     /** @type {(() => void) | null} */
     let removeTimeCap = null;
     let slideClosed = false;
+    let hangGuard = 0;
 
     const teardownSlide = () => {
+      if (hangGuard) {
+        clearTimeout(hangGuard);
+        hangGuard = 0;
+      }
       if (poll != null) {
         clearInterval(poll);
         poll = null;
@@ -413,19 +431,38 @@ export function mountVotingSlideshowScreen(root, ctx) {
       void playNext();
     };
 
+    hangGuard = window.setTimeout(() => {
+      if (!slideClosed) advance();
+    }, SLIDE_HANG_GUARD_MS);
+
     try {
-      const res = await fetch(fullUrl, { headers: authHeadersMultipart() });
-      if (!res.ok) throw new Error(String(res.status));
-      const blob = await res.blob();
+      if (!waveEl) throw new Error("no wave container");
+
+      const blob = await withTimeoutMs(
+        (async () => {
+          const res = await fetch(fullUrl, {
+            headers: authHeadersMultipart(),
+          });
+          if (!res.ok) throw new Error(String(res.status));
+          return res.blob();
+        })(),
+        SLIDE_FETCH_TIMEOUT_MS,
+      );
 
       slideObjectUrl = URL.createObjectURL(blob);
       const WaveSurfer = getWaveSurfer();
       wsur = WaveSurfer.create({
         container: waveEl,
-        height: 120,
+        height: SLIDE_WAVEFORM_HEIGHT,
         waveColor: "#b01010",
         progressColor: "#ffffff",
         cursorWidth: 2,
+        interact: false,
+        normalize: false,
+        sampleRate: SLIDE_WAVEFORM_SAMPLE_RATE,
+        minPxPerSec: SLIDE_WAVEFORM_MIN_PX_PER_SEC,
+        barWidth: SLIDE_WAVEFORM_BAR_WIDTH,
+        barGap: SLIDE_WAVEFORM_BAR_GAP,
         url: slideObjectUrl,
       });
       activeWsur = wsur;
@@ -452,16 +489,14 @@ export function mountVotingSlideshowScreen(root, ctx) {
             typeof wsur.getCurrentTime === "function"
               ? wsur.getCurrentTime()
               : (media?.currentTime ?? 0);
-          if (t >= end - 0.05) {
-            advance();
-          }
+          if (t >= end - 0.05) advance();
         };
-        poll = window.setInterval(cap, 50);
         if (media) {
-          const onTime = () => cap();
-          media.addEventListener("timeupdate", onTime);
+          media.addEventListener("timeupdate", cap);
           removeTimeCap = () =>
-            media.removeEventListener("timeupdate", onTime);
+            media.removeEventListener("timeupdate", cap);
+        } else {
+          poll = window.setInterval(cap, 250);
         }
       });
 
@@ -640,6 +675,7 @@ export function mountVotingSlideshowScreen(root, ctx) {
       } catch {
         /* ignore */
       }
+      activeWsur = null;
     }
     teardownClose = true;
     root.innerHTML = "";

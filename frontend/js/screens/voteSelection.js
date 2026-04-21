@@ -36,6 +36,9 @@ import {
 import { fetchMatchSync, pollMatchSync } from "../mpMatchSync.js";
 import { playSfxMajor } from "../sfx.js";
 import { mountResultsScreen } from "./results.js";
+import { withTimeoutMs } from "../withTimeoutMs.js";
+
+const BEAT_LOAD_TIMEOUT_MS = 60_000;
 
 function getWaveSurfer() {
   const g = globalThis;
@@ -414,35 +417,42 @@ export function mountVoteSelectionScreen(root, ctx) {
 
       void (async () => {
         try {
-          const res = await fetch(fullUrl, { headers: authHeadersMultipart() });
-          if (!res.ok) throw new Error(String(res.status));
-          const blob = await res.blob();
-          const objUrl = URL.createObjectURL(blob);
-          objectUrls.push(objUrl);
-          audio.src = objUrl;
+          await withTimeoutMs(
+            (async () => {
+              const res = await fetch(fullUrl, {
+                headers: authHeadersMultipart(),
+              });
+              if (!res.ok) throw new Error(String(res.status));
+              const blob = await res.blob();
+              const objUrl = URL.createObjectURL(blob);
+              objectUrls.push(objUrl);
+              audio.src = objUrl;
 
-          waveWrap.textContent = "";
-          waveWrap.classList.remove("empty");
+              waveWrap.textContent = "";
+              waveWrap.classList.remove("empty");
 
-          const WaveSurfer = getWaveSurfer();
-          const wsur = WaveSurfer.create({
-            container: waveWrap,
-            height: 72,
-            waveColor: "#b01010",
-            progressColor: "#ffffff",
-            cursorWidth: 0,
-            interact: false,
-            url: objUrl,
-          });
-          waveCleanups.push({
-            destroy: () => {
-              try {
-                wsur.destroy();
-              } catch {
-                /* ignore */
-              }
-            },
-          });
+              const WaveSurfer = getWaveSurfer();
+              const wsur = WaveSurfer.create({
+                container: waveWrap,
+                height: 72,
+                waveColor: "#b01010",
+                progressColor: "#ffffff",
+                cursorWidth: 0,
+                interact: false,
+                url: objUrl,
+              });
+              waveCleanups.push({
+                destroy: () => {
+                  try {
+                    wsur.destroy();
+                  } catch {
+                    /* ignore */
+                  }
+                },
+              });
+            })(),
+            BEAT_LOAD_TIMEOUT_MS,
+          );
         } catch {
           waveWrap.textContent = "—";
           waveWrap.classList.add("empty");
