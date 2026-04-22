@@ -323,10 +323,23 @@ async def lifespan(app: FastAPI):
             except Exception:
                 pass
 
+    async def warm_manifest_cache() -> None:
+        """Best-effort cache warmup; never block server startup readiness."""
+        timeout_s = _env_float("COOKUP_MANIFEST_WARMUP_TIMEOUT_S", 8.0, minimum=1.0)
+        try:
+            await asyncio.wait_for(asyncio.to_thread(get_kit_manifest_cached), timeout=timeout_s)
+        except Exception:
+            pass
+        try:
+            await asyncio.wait_for(
+                asyncio.to_thread(get_kit_manifest_for_genre, "edm"), timeout=timeout_s
+            )
+        except Exception:
+            pass
+
     task = asyncio.create_task(cleanup_loop())
     visit_task = asyncio.create_task(visit_flush_loop())
-    await asyncio.to_thread(get_kit_manifest_cached)
-    await asyncio.to_thread(get_kit_manifest_for_genre, "edm")
+    manifest_warm_task = asyncio.create_task(warm_manifest_cache())
     yield
     # Flush remaining visits before shutdown
     try:
@@ -335,12 +348,17 @@ async def lifespan(app: FastAPI):
         pass
     task.cancel()
     visit_task.cancel()
+    manifest_warm_task.cancel()
     try:
         await task
     except asyncio.CancelledError:
         pass
     try:
         await visit_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await manifest_warm_task
     except asyncio.CancelledError:
         pass
 
