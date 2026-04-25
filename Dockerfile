@@ -7,7 +7,7 @@ ENV PORT=8000
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg libsndfile1 \
+    && apt-get install -y --no-install-recommends curl ffmpeg libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt /tmp/requirements.txt
